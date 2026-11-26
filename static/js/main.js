@@ -449,6 +449,28 @@
     return confidenceInput ? Number(confidenceInput.value) : 0.25;
   }
 
+  async function readJsonResponse(response, operation) {
+    const body = await response.text();
+    let payload;
+    try {
+      payload = JSON.parse(body);
+    } catch {
+      const routingHint = response.status === 404
+        ? " Check that deployment routing sends this request to Flask."
+        : "";
+      throw new Error(
+        `${operation} returned a non-JSON response (HTTP ${response.status}).${routingHint}`
+      );
+    }
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+      throw new Error(`${operation} returned an invalid response.`);
+    }
+    if (!response.ok) {
+      throw new Error(payload.error || `${operation} failed (HTTP ${response.status}).`);
+    }
+    return payload;
+  }
+
   if (confidenceInput && confidenceOutput) {
     const updateConfidence = () => { confidenceOutput.value = Number(confidenceInput.value).toFixed(2); };
     confidenceInput.addEventListener("input", updateConfidence);
@@ -462,9 +484,7 @@
     button.textContent = "Loading model and detecting…";
     try {
       const response = await fetch(action, body);
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || "PPE detection failed.");
-      return result;
+      return await readJsonResponse(response, "PPE detection");
     } finally {
       button.disabled = false;
       button.textContent = previousText;
@@ -511,8 +531,7 @@
           confidence: confidenceThreshold(),
         }),
       });
-      const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error || "PPE detection failed.");
+      const payload = await readJsonResponse(response, "PPE detection");
       payload.source_index = String([...resultsGrid.children].findIndex((card) =>
         card.querySelector(".result-detect-button") === button) + 1).padStart(2, "0");
       payload.annotated_download_url = payload.annotated_url.replace("/preview/", "/download/");
@@ -548,8 +567,7 @@
     if (progress) progress.hidden = false;
     try {
       const response = await fetch("/augment", { method: "POST", body: form });
-      const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error || "Could not generate images.");
+      const payload = await readJsonResponse(response, "Image generation");
       activeSession = payload.session_id;
       clearAugmentedDetectionResults();
       resultsGrid.replaceChildren(...payload.results.map(createResultCard));

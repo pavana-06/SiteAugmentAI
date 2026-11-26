@@ -105,6 +105,7 @@ def test_model_load_errors_are_safe_and_cached(image):
         with pytest.raises(DetectorUnavailable, match="PPE detection model is unavailable") as error:
             detector.detect(image)
         assert "private checkpoint path" not in str(error.value)
+        assert "separate service" in str(error.value)
     assert len(attempts) == 1
 
 

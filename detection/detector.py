@@ -16,6 +16,11 @@ from .model_config import (
 
 
 logger = logging.getLogger(__name__)
+MODEL_UNAVAILABLE_MESSAGE = (
+    "PPE detection model is unavailable. For local use, install "
+    "requirements-detection.txt and check model access. On serverless "
+    "platforms with function-size limits, run inference in a separate service."
+)
 
 
 class DetectorUnavailable(RuntimeError):
@@ -101,24 +106,18 @@ class PPEDetector:
         if self._model is not None:
             return self._model
         if self._load_error is not None:
-            raise DetectorUnavailable(
-                "PPE detection model is unavailable. Check model setup and server logs."
-            ) from self._load_error
+            raise DetectorUnavailable(MODEL_UNAVAILABLE_MESSAGE) from self._load_error
         with self._load_lock:
             if self._model is not None:
                 return self._model
             if self._load_error is not None:
-                raise DetectorUnavailable(
-                    "PPE detection model is unavailable. Check model setup and server logs."
-                ) from self._load_error
+                raise DetectorUnavailable(MODEL_UNAVAILABLE_MESSAGE) from self._load_error
             try:
                 self._model = self._load_model()
             except Exception as exc:
                 self._load_error = exc
                 logger.exception("Could not load the PPE detection model")
-                raise DetectorUnavailable(
-                    "PPE detection model is unavailable. Check model setup and server logs."
-                ) from exc
+                raise DetectorUnavailable(MODEL_UNAVAILABLE_MESSAGE) from exc
         return self._model
 
     @staticmethod
