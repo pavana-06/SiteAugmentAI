@@ -134,11 +134,11 @@ The response includes pixel-coordinate boxes (`x1`, `y1`, `x2`, `y2`), class id 
 pytest -q
 ```
 
-Tests cover algorithm output/validation, deterministic combined processing, the dashboard, valid and invalid uploads, generation, individual downloads, ZIP downloads, rejected paths, mocked PPE inference, ONNX preprocessing/postprocessing, visualization, and endpoints. The bundled ONNX model also supports a real inference smoke test without downloading weights.
+Tests cover algorithm output/validation, multi-image detail retention, default noise limits, balanced-recipe diversity and seeded reproducibility, the dashboard, valid and invalid uploads, generation, individual downloads, ZIP downloads, rejected paths, mocked PPE inference, ONNX preprocessing/postprocessing, visualization, and endpoints. The bundled ONNX model also supports a real inference smoke test without downloading weights.
 
 ## Augmentation techniques
 
-Brightness varies randomly above or below the source intensity; gamma remaps tonal response; contrast scales pixel values. Artificial shadows use a softened polygon mask. Gaussian and horizontal motion blur simulate focus and movement. Additive Gaussian noise simulates sensor grain. Occlusion places a bounded translucent rectangle over part of the image. Haze combines a smooth spatial veil with atmospheric light. Effects are applied in recipe order and retain the original width and height.
+Brightness varies randomly above or below the source intensity; gamma remaps tonal response; contrast scales pixel values around a neutral midpoint. Artificial shadows use a softened polygon mask. Gaussian blur uses a low sigma by default; motion blur uses a short, source-blended line kernel. Additive Gaussian noise has a low default deviation. Occlusion places a bounded translucent rectangle over part of the image. Haze combines a smooth spatial veil with atmospheric light. UI defaults and preset intensities are deliberately conservative; when Gaussian and motion blur are both selected their strengths are reduced to limit compounded detail loss. The **Balanced site** preset combines mild brightness, contrast, shadow, noise, and haze changes without blur or occlusion. Effects are applied in recipe order and retain the original width and height. These settings are engineering choices, not evidence that outputs match real construction-site conditions; inspect samples from the intended dataset before using them.
 
 ## Metrics and limitations
 

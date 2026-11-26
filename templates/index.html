@@ -134,7 +134,7 @@
                   <input class="effect-toggle" type="checkbox" data-effect="brightness" checked aria-label="Enable brightness">
                   <i class="switch" aria-hidden="true"></i>
                 </label>
-                <div class="effect-control"><input type="range" min="0.05" max="0.8" step="0.05" value="0.25" data-param="intensity" aria-label="Brightness intensity"><output>0.25</output></div>
+                <div class="effect-control"><input type="range" min="0.01" max="0.4" step="0.01" value="0.12" data-param="intensity" aria-label="Brightness intensity"><output>0.12</output></div>
               </article>
 
               <article class="effect-card">
@@ -144,7 +144,7 @@
                   <input class="effect-toggle" type="checkbox" data-effect="contrast" aria-label="Enable contrast">
                   <i class="switch" aria-hidden="true"></i>
                 </label>
-                <div class="effect-control"><input type="range" min="0.35" max="2.2" step="0.05" value="1.35" data-param="factor" aria-label="Contrast factor"><output>1.35</output></div>
+                <div class="effect-control"><input type="range" min="0.65" max="1.5" step="0.05" value="1.1" data-param="factor" aria-label="Contrast factor"><output>1.10</output></div>
               </article>
 
               <article class="effect-card">
@@ -154,7 +154,7 @@
                   <input class="effect-toggle" type="checkbox" data-effect="gamma" aria-label="Enable gamma correction">
                   <i class="switch" aria-hidden="true"></i>
                 </label>
-                <div class="effect-control"><input type="range" min="0.4" max="2.8" step="0.1" value="1.4" data-param="gamma" aria-label="Gamma value"><output>1.40</output></div>
+                <div class="effect-control"><input type="range" min="0.65" max="1.8" step="0.05" value="1.1" data-param="gamma" aria-label="Gamma value"><output>1.10</output></div>
               </article>
 
               <article class="effect-card">
@@ -164,7 +164,7 @@
                   <input class="effect-toggle" type="checkbox" data-effect="shadow" aria-label="Enable shadows">
                   <i class="switch" aria-hidden="true"></i>
                 </label>
-                <div class="effect-control"><input type="range" min="0.05" max="0.85" step="0.05" value="0.35" data-param="intensity" aria-label="Shadow intensity"><output>0.35</output></div>
+                <div class="effect-control"><input type="range" min="0.05" max="0.6" step="0.01" value="0.12" data-param="intensity" aria-label="Shadow intensity"><output>0.12</output></div>
               </article>
 
               <article class="effect-card">
@@ -174,7 +174,7 @@
                   <input class="effect-toggle" type="checkbox" data-effect="gaussian_blur" aria-label="Enable Gaussian blur">
                   <i class="switch" aria-hidden="true"></i>
                 </label>
-                <div class="effect-control"><input type="range" min="0.05" max="1" step="0.05" value="0.35" data-param="strength" aria-label="Gaussian blur strength"><output>0.35</output></div>
+                <div class="effect-control"><input type="range" min="0.05" max="0.6" step="0.01" value="0.12" data-param="strength" aria-label="Gaussian blur strength"><output>0.12</output></div>
               </article>
 
               <article class="effect-card">
@@ -184,7 +184,7 @@
                   <input class="effect-toggle" type="checkbox" data-effect="motion_blur" aria-label="Enable motion blur">
                   <i class="switch" aria-hidden="true"></i>
                 </label>
-                <div class="effect-control"><input type="range" min="0.05" max="1" step="0.05" value="0.35" data-param="strength" aria-label="Motion blur strength"><output>0.35</output></div>
+                <div class="effect-control"><input type="range" min="0.05" max="0.6" step="0.01" value="0.1" data-param="strength" aria-label="Motion blur strength"><output>0.10</output></div>
               </article>
 
               <article class="effect-card">
@@ -194,7 +194,7 @@
                   <input class="effect-toggle" type="checkbox" data-effect="noise" aria-label="Enable noise">
                   <i class="switch" aria-hidden="true"></i>
                 </label>
-                <div class="effect-control"><input type="range" min="0.01" max="0.5" step="0.01" value="0.12" data-param="intensity" aria-label="Noise intensity"><output>0.12</output></div>
+                <div class="effect-control"><input type="range" min="0.01" max="0.25" step="0.01" value="0.04" data-param="intensity" aria-label="Noise intensity"><output>0.04</output></div>
               </article>
 
               <article class="effect-card">
@@ -204,7 +204,7 @@
                   <input class="effect-toggle" type="checkbox" data-effect="occlusion" aria-label="Enable occlusion">
                   <i class="switch" aria-hidden="true"></i>
                 </label>
-                <div class="effect-control"><input type="range" min="0.03" max="0.4" step="0.01" value="0.2" data-param="intensity" aria-label="Occlusion intensity"><output>0.20</output></div>
+                <div class="effect-control"><input type="range" min="0.03" max="0.25" step="0.01" value="0.07" data-param="intensity" aria-label="Occlusion intensity"><output>0.07</output></div>
               </article>
 
               <article class="effect-card">
@@ -214,7 +214,7 @@
                   <input class="effect-toggle" type="checkbox" data-effect="haze" aria-label="Enable haze">
                   <i class="switch" aria-hidden="true"></i>
                 </label>
-                <div class="effect-control"><input type="range" min="0.02" max="0.65" step="0.01" value="0.25" data-param="intensity" aria-label="Haze intensity"><output>0.25</output></div>
+                <div class="effect-control"><input type="range" min="0.02" max="0.4" step="0.01" value="0.08" data-param="intensity" aria-label="Haze intensity"><output>0.08</output></div>
               </article>
             </div>
 
@@ -243,6 +243,11 @@
             <span>Existing effects only</span>
           </div>
           <div class="preset-grid">
+            <button class="preset-card" type="button" data-preset="balanced">
+              <span class="preset-icon balanced" aria-hidden="true">✦</span>
+              <span><strong>Balanced site</strong><small>Light · shade · haze · grain</small></span>
+              <i>→</i>
+            </button>
             <button class="preset-card" type="button" data-preset="low-light">
               <span class="preset-icon low-light" aria-hidden="true">☾</span>
               <span><strong>Low-light scene</strong><small>Brightness · Gamma · Noise</small></span>

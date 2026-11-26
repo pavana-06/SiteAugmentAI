@@ -33,6 +33,7 @@ def apply_augmentations(image, augmentations, seed=None):
     rng = np.random.default_rng(seed)
     result = image.copy()
     labels = []
+    selected_names = []
     for item in augmentations:
         if not isinstance(item, dict):
             raise ValueError("each augmentation must be an object")
@@ -40,32 +41,45 @@ def apply_augmentations(image, augmentations, seed=None):
         params = item.get("params", {})
         if name not in SUPPORTED_AUGMENTATIONS or not isinstance(params, dict):
             raise ValueError("unsupported augmentation or invalid parameters")
+        selected_names.append(name)
+    if len(selected_names) != len(set(selected_names)):
+        raise ValueError("each augmentation can only be selected once")
+    # Two blur passes compound, so both strengths are reduced when combined.
+    combined_blur = {"gaussian_blur", "motion_blur"}.issubset(selected_names)
+
+    for item in augmentations:
+        name = item["name"]
+        params = item.get("params", {})
         if name == "brightness":
-            intensity = _validated_number(params.get("intensity", 0.25), "brightness intensity", 0.0, 1.0)
+            intensity = _validated_number(params.get("intensity", 0.12), "brightness intensity", 0.0, 0.4)
             result = random_brightness(result, intensity, rng)
         elif name == "contrast":
-            factor = _validated_number(params.get("factor", 1.35), "contrast factor", 0.1, 3.0)
+            factor = _validated_number(params.get("factor", 1.1), "contrast factor", 0.65, 1.5)
             result = adjust_contrast(result, factor)
         elif name == "gamma":
-            gamma = _validated_number(params.get("gamma", 1.4), "gamma", 0.1, 5.0)
+            gamma = _validated_number(params.get("gamma", 1.1), "gamma", 0.65, 1.8)
             result = gamma_correction(result, gamma)
         elif name == "shadow":
-            intensity = _validated_number(params.get("intensity", 0.35), "shadow intensity", 0.05, 0.85)
+            intensity = _validated_number(params.get("intensity", 0.12), "shadow intensity", 0.05, 0.6)
             result = add_shadow(result, intensity, rng)
         elif name == "gaussian_blur":
-            strength = _validated_number(params.get("strength", 0.35), "blur strength", 0.05, 1.0)
+            strength = _validated_number(params.get("strength", 0.12), "Gaussian blur strength", 0.05, 0.6)
+            if combined_blur:
+                strength = max(0.05, min(0.2, strength * 0.35))
             result = gaussian_blur(result, strength)
         elif name == "motion_blur":
-            strength = _validated_number(params.get("strength", 0.35), "blur strength", 0.05, 1.0)
+            strength = _validated_number(params.get("strength", 0.1), "motion blur strength", 0.05, 0.6)
+            if combined_blur:
+                strength = max(0.05, min(0.2, strength * 0.35))
             result = motion_blur(result, strength)
         elif name == "noise":
-            intensity = _validated_number(params.get("intensity", 0.12), "noise intensity", 0.01, 0.5)
+            intensity = _validated_number(params.get("intensity", 0.04), "noise intensity", 0.01, 0.25)
             result = add_noise(result, intensity, rng)
         elif name == "occlusion":
-            intensity = _validated_number(params.get("intensity", 0.2), "occlusion intensity", 0.03, 0.4)
+            intensity = _validated_number(params.get("intensity", 0.07), "occlusion intensity", 0.03, 0.25)
             result = add_occlusion(result, intensity, rng)
         elif name == "haze":
-            intensity = _validated_number(params.get("intensity", 0.25), "haze intensity", 0.02, 0.65)
+            intensity = _validated_number(params.get("intensity", 0.08), "haze intensity", 0.02, 0.4)
             result = add_haze(result, intensity, rng)
         labels.append(name.replace("_", " ").title())
     return result, labels

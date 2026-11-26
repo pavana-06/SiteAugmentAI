@@ -216,24 +216,31 @@
   });
 
   const presetRecipes = {
+    "balanced": [
+      ["brightness", "intensity", 0.12],
+      ["contrast", "factor", 1.1],
+      ["shadow", "intensity", 0.12],
+      ["noise", "intensity", 0.04],
+      ["haze", "intensity", 0.08],
+    ],
     "low-light": [
-      ["brightness", "intensity", 0.3],
-      ["gamma", "gamma", 1.5],
-      ["noise", "intensity", 0.14],
+      ["brightness", "intensity", 0.15],
+      ["gamma", "gamma", 1.25],
+      ["noise", "intensity", 0.05],
     ],
     "dust": [
-      ["haze", "intensity", 0.38],
-      ["contrast", "factor", 1.25],
-      ["occlusion", "intensity", 0.18],
+      ["haze", "intensity", 0.14],
+      ["contrast", "factor", 1.1],
+      ["occlusion", "intensity", 0.08],
     ],
     "motion": [
-      ["motion_blur", "strength", 0.45],
-      ["noise", "intensity", 0.12],
+      ["motion_blur", "strength", 0.15],
+      ["noise", "intensity", 0.05],
     ],
     "shadow": [
-      ["contrast", "factor", 1.45],
-      ["gamma", "gamma", 1.2],
-      ["shadow", "intensity", 0.45],
+      ["contrast", "factor", 1.2],
+      ["gamma", "gamma", 1.1],
+      ["shadow", "intensity", 0.18],
     ],
   };
 

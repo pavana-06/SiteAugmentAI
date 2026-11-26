@@ -7,35 +7,35 @@ def _validate_image(image):
         raise ValueError("image must be an RGB uint8 array")
 
 
-def brightness(image, amount=0.15):
+def brightness(image, amount=0.1):
     _validate_image(image)
-    if not -1.0 <= float(amount) <= 1.0:
-        raise ValueError("brightness amount must be between -1 and 1")
+    if not -0.5 <= float(amount) <= 0.5:
+        raise ValueError("brightness amount must be between -0.5 and 0.5")
     return np.clip(image.astype(np.float32) + float(amount) * 255, 0, 255).astype(np.uint8)
 
 
-def increase_brightness(image, amount=0.15):
-    if not 0 < float(amount) <= 1:
-        raise ValueError("brightness amount must be between 0 and 1")
+def increase_brightness(image, amount=0.1):
+    if not 0 < float(amount) <= 0.5:
+        raise ValueError("brightness amount must be between 0 and 0.5")
     return brightness(image, amount)
 
 
-def decrease_brightness(image, amount=0.15):
-    if not 0 < float(amount) <= 1:
-        raise ValueError("brightness amount must be between 0 and 1")
+def decrease_brightness(image, amount=0.1):
+    if not 0 < float(amount) <= 0.5:
+        raise ValueError("brightness amount must be between 0 and 0.5")
     return brightness(image, -amount)
 
 
-def random_brightness(image, intensity=0.2, rng=None):
-    if not 0 <= float(intensity) <= 1:
-        raise ValueError("intensity must be between 0 and 1")
+def random_brightness(image, intensity=0.12, rng=None):
+    if not 0 <= float(intensity) <= 0.4:
+        raise ValueError("intensity must be between 0 and 0.4")
     rng = rng or np.random.default_rng()
     return brightness(image, rng.uniform(-intensity, intensity))
 
 
-def gamma_correction(image, gamma=1.2):
+def gamma_correction(image, gamma=1.1):
     _validate_image(image)
-    if not 0.1 <= float(gamma) <= 5.0:
-        raise ValueError("gamma must be between 0.1 and 5")
+    if not 0.65 <= float(gamma) <= 1.8:
+        raise ValueError("gamma must be between 0.65 and 1.8")
     lookup = np.clip(((np.arange(256) / 255.0) ** (1.0 / float(gamma))) * 255, 0, 255).astype(np.uint8)
     return cv2.LUT(image, lookup)
