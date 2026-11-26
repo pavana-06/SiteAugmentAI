@@ -89,6 +89,7 @@ def create_app(config_object=Config):
     def run_detection(image, confidence, source):
         result = get_detector().detect(image, confidence)
         visualization = PPEDetector.visualize(image, result["detections"])
+        preview_data_url = encode_preview_data_url(visualization)
         filename = f"{uuid.uuid4().hex}.png"
         output_path = os.path.join(app.config["OUTPUT_FOLDER"], filename)
         with open(output_path, "wb") as output_file:
@@ -103,6 +104,7 @@ def create_app(config_object=Config):
             summary=result["summary"],
             annotated_filename=filename,
             annotated_url=f"/preview/{filename}",
+            annotated_preview_data_url=preview_data_url,
         )
 
     @app.post("/augment")

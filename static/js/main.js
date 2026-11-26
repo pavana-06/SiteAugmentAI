@@ -393,9 +393,22 @@
     const visual = document.createElement("div");
     visual.className = "detection-visual";
     const image = document.createElement("img");
-    image.src = result.annotated_url;
     image.alt = `PPE detection visualization: ${sourceTitle}`;
-    image.loading = "lazy";
+    image.loading = "eager";
+    let usingInlinePreview = Boolean(result.annotated_preview_data_url);
+    image.addEventListener("error", () => {
+      if (usingInlinePreview && result.annotated_url) {
+        usingInlinePreview = false;
+        image.src = result.annotated_url;
+        return;
+      }
+      const error = document.createElement("span");
+      error.className = "detection-image-error";
+      error.setAttribute("role", "status");
+      error.textContent = "Visualization could not be loaded.";
+      image.replaceWith(error);
+    });
+    image.src = result.annotated_preview_data_url || result.annotated_url;
     visual.append(image);
 
     const body = document.createElement("div");
@@ -418,6 +431,13 @@
     confidence.textContent = distribution.mean === null
       ? "CONFIDENCE · No objects above threshold"
       : `CONFIDENCE · min ${distribution.min.toFixed(2)} · mean ${distribution.mean.toFixed(2)} · max ${distribution.max.toFixed(2)}`;
+    body.append(counts, confidence);
+    if (result.summary.total_detections === 0) {
+      const noDetections = document.createElement("p");
+      noDetections.className = "detection-empty-state";
+      noDetections.textContent = "No objects exceeded the confidence threshold.";
+      body.append(noDetections);
+    }
 
     const boxes = document.createElement("div");
     boxes.className = "box-list";
@@ -437,7 +457,7 @@
     download.href = result.annotated_download_url;
     download.download = `siteaugment-detections-${result.annotated_filename}`;
     download.textContent = "↓ Download annotated PNG";
-    body.append(counts, confidence, boxes, download);
+    body.append(boxes, download);
     card.append(heading, visual, body);
     return card;
   }

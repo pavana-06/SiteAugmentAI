@@ -79,6 +79,20 @@ class FakePpeDetector:
         }
 
 
+class ZeroDetectionPpeDetector(FakePpeDetector):
+    def detect(self, image, confidence):
+        self.calls.append((image.copy(), confidence))
+        return {
+            "detections": [],
+            "summary": {
+                "total_detections": 0,
+                "class_counts": {"helmet": 0, "vest": 0},
+                "confidence": {"min": None, "max": None, "mean": None},
+            },
+            "classes": ["helmet", "vest"],
+        }
+
+
 class UnavailablePpeDetector:
     def detect(self, _image, _confidence):
         raise DetectorUnavailable("PPE detection model is unavailable. Check model setup and server logs.")
@@ -427,6 +441,11 @@ def test_original_detection_endpoint_visualization_and_download(tmp_path, monkey
     assert payload["image"] == {"width": 64, "height": 48}
     assert payload["summary"]["total_detections"] == 1
     assert payload["detections"][0]["label"] == "helmet"
+    assert payload["annotated_preview_data_url"].startswith("data:image/jpeg;base64,")
+    preview_data = base64.b64decode(payload["annotated_preview_data_url"].split(",", 1)[1])
+    with Image.open(BytesIO(preview_data)) as preview_image:
+        assert preview_image.format == "JPEG"
+        assert preview_image.size == (64, 48)
     assert detector.calls[0][1] == 0.55
     assert np.array_equal(detector.calls[0][0][:, :, 0], np.asarray(Image.open(BytesIO(png_bytes())).convert("RGB"))[:, :, 0])
 
@@ -436,9 +455,43 @@ def test_original_detection_endpoint_visualization_and_download(tmp_path, monkey
     assert "attachment" not in preview.headers.get("Content-Disposition", "")
     with Image.open(BytesIO(preview.data)) as annotated:
         assert annotated.size == (64, 48)
+        assert not np.array_equal(
+            np.asarray(annotated.convert("RGB")),
+            np.asarray(Image.open(BytesIO(png_bytes())).convert("RGB")),
+        )
     download = browser.get(payload["annotated_url"].replace("/preview/", "/download/"))
     assert download.status_code == 200
     assert "attachment" in download.headers.get("Content-Disposition", "")
+    assert download.mimetype == "image/png"
+    assert download.data == preview.data
+
+
+def test_zero_detection_returns_original_visualization_and_inline_preview_across_instances(tmp_path, monkeypatch):
+    browser = ppe_client(tmp_path, monkeypatch, ZeroDetectionPpeDetector())
+    response = browser.post(
+        "/detect",
+        data={"image": (BytesIO(png_bytes()), "site.png")},
+        content_type="multipart/form-data",
+    )
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["summary"]["total_detections"] == 0
+    assert payload["summary"]["class_counts"] == {"helmet": 0, "vest": 0}
+    assert payload["summary"]["confidence"] == {"min": None, "max": None, "mean": None}
+
+    preview = browser.get(payload["annotated_url"])
+    assert preview.status_code == 200
+    assert preview.mimetype == "image/png"
+    with Image.open(BytesIO(preview.data)) as annotated:
+        assert annotated.format == "PNG"
+        assert np.array_equal(np.asarray(annotated.convert("RGB")), np.asarray(Image.open(BytesIO(png_bytes())).convert("RGB")))
+
+    separate_instance = create_app(TestConfig).test_client()
+    assert separate_instance.get(payload["annotated_url"]).status_code == 404
+    inline_preview = base64.b64decode(payload["annotated_preview_data_url"].split(",", 1)[1])
+    with Image.open(BytesIO(inline_preview)) as annotated_preview:
+        assert annotated_preview.format == "JPEG"
+        assert annotated_preview.size == (64, 48)
 
 
 def test_detection_visualization_write_failure_returns_json_and_logs(tmp_path, monkeypatch, caplog):
@@ -550,6 +603,7 @@ def test_augmented_detection_requires_session_membership(tmp_path, monkeypatch):
     payload = response.get_json()
     assert payload["source"] == "augmented"
     assert payload["summary"]["total_detections"] == 1
+    assert payload["annotated_preview_data_url"].startswith("data:image/jpeg;base64,")
     assert detector.calls[-1][1] == 0.4
     assert browser.get(payload["annotated_url"]).status_code == 200
 

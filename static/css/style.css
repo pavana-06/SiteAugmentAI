@@ -531,9 +531,11 @@ h1 em {
 .detection-card-heading strong { display: block; font-size: 9px; }.detection-card-heading small { display: block; margin-top: 3px; color: #77869b; font-size: 7px; }
 .detection-total { align-self: flex-start; padding: 4px 6px; border: 1px solid #30445a; border-radius: 5px; color: #82d6e0; font: 8px "DM Mono", monospace; white-space: nowrap; }
 .detection-visual { position: relative; height: 165px; display: grid; place-items: center; background: #080d16; }.detection-visual img { width: 100%; height: 100%; object-fit: contain; }
+.detection-image-error { padding: 12px; color: #a8b7c9; font-size: 9px; text-align: center; }
 .detection-card-body { padding: 9px; }.class-counts { display: flex; flex-wrap: wrap; gap: 4px; }.class-count-chip { padding: 4px 5px; border: 1px solid #2c4056; border-radius: 4px; background: #162239; color: #b8c9dc; font-size: 7px; }
 .class-count-chip b { margin-left: 4px; color: #73d5e0; font: 8px "DM Mono", monospace; }
 .confidence-summary { margin-top: 8px; padding-top: 7px; border-top: 1px solid #222d3e; color: #7f8ea3; font: 7px "DM Mono", monospace; }
+.detection-empty-state { margin: 7px 0 0; color: #a8b7c9; font-size: 8px; }
 .box-list { max-height: 130px; overflow: auto; display: grid; gap: 4px; margin-top: 8px; }
 .box-row { display: flex; justify-content: space-between; gap: 8px; color: #aab9ca; font-size: 7px; }.box-row span:last-child { color: #84d9e3; font-family: "DM Mono", monospace; }
 .detection-download { height: 28px; display: grid; place-items: center; margin-top: 8px; border: 1px solid #2c3e54; border-radius: 5px; color: #b4c5d8; font-size: 8px; text-decoration: none; transition: .18s; }.detection-download:hover { border-color: #4c93a4; color: #89e0e9; }
