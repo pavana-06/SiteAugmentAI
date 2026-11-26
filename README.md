@@ -102,9 +102,11 @@ python -m pip install --force-reinstall --no-deps opencv-python-headless
 
 Because the headless OpenCV wheel provides the same `cv2` runtime as Ultralytics' GUI wheel, `pip check` may still report that Ultralytics' `opencv-python` package requirement is not installed after applying this headless-server workaround. OpenCV inference and this application work with the installed headless replacement; do not install both OpenCV wheels into a server environment lacking `libGL.so.1`.
 
-### Serverless deployment size
+### Deploy the complete app on Render
 
-Keep serverless deployment builds on `requirements.txt`; do not install `requirements-detection.txt` or bundle PyTorch/model weights in a function package. PyTorch's transitive runtime packages can exceed providers' function-size limits (including the 500 MB limit reported by AWS Lambda-compatible platforms). The augmentation application remains deployable without those optional dependencies. To enable inference in a size-limited serverless deployment, run the detector in a separately deployed inference service and connect it through an authenticated API; the current app does not configure or include such a service.
+The PPE detector needs PyTorch, which exceeds the function-package limit on Vercel and similar serverless platforms. This repository includes a Render Blueprint in `render.yaml` that installs both the core and inference dependencies from `requirements-render.txt`, then runs Flask with Gunicorn. In Render, create a new Blueprint from this repository and use the **Standard** web-service plan for sufficient memory during CPU inference. The Blueprint generates a `SECRET_KEY`; no model weights are bundled, and the checkpoint downloads on the first PPE detection request.
+
+The service is configured with one Gunicorn worker because generated files and session membership are stored in local disk and process memory. This storage is ephemeral and restarting or scaling the service invalidates existing image sessions. For persistent or multi-instance production use, move generated files and sessions to shared storage. Keep Vercel deployments on `requirements.txt` only; the app can augment images there, but PPE inference will return `503` unless you deploy a separate inference service.
 
 ## PPE detection usage and API
 

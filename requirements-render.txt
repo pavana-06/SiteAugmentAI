@@ -1,0 +1,3 @@
+-r requirements.txt
+-r requirements-detection.txt
+gunicorn>=22,<24

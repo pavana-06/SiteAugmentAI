@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: siteaugment-ai
+    runtime: python
+    plan: standard
+    buildCommand: >-
+      pip install -r requirements-render.txt &&
+      pip uninstall -y opencv-python &&
+      pip install --force-reinstall --no-deps opencv-python-headless
+    startCommand: gunicorn --workers 1 --threads 4 --timeout 120 app:app
+    healthCheckPath: /
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.11
+      - key: SECRET_KEY
+        generateValue: true
+      - key: FLASK_DEBUG
+        value: "0"
