@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#090d17">
+  <meta name="description" content="SiteAugment AI construction-site image augmentation workspace">
+  <title>SiteAugment AI — Image Augmentation</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="/" aria-label="SiteAugment AI dashboard">
+        <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+        <span class="brand-copy">SiteAugment <b>AI</b></span>
+      </a>
+
+      <nav class="sidebar-nav" aria-label="Primary navigation">
+        <p class="nav-label">Workspace</p>
+        <a class="nav-item active" href="#workspace" data-nav="workspace">
+          <span class="nav-icon" aria-hidden="true">▦</span><span>Dashboard</span>
+          <i class="nav-active-dot"></i>
+        </a>
+        <a class="nav-item" href="#image-lab" data-nav="image-lab">
+          <span class="nav-icon" aria-hidden="true">◫</span><span>Image Augmentation</span>
+        </a>
+        <a class="nav-item" href="#batch" data-nav="batch">
+          <span class="nav-icon" aria-hidden="true">⧉</span><span>Batch Processing</span>
+        </a>
+        <a class="nav-item" href="#evaluation" data-nav="evaluation">
+          <span class="nav-icon" aria-hidden="true">⌁</span><span>Evaluation</span>
+        </a>
+        <a class="nav-item" href="#about" data-nav="about">
+          <span class="nav-icon" aria-hidden="true">ⓘ</span><span>About Project</span>
+        </a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="engine-status">
+          <span class="engine-icon" aria-hidden="true">✦</span>
+          <div><strong>Engine ready</strong><small><i></i> Local processing</small></div>
+        </div>
+        <div class="team-line"><span>SA</span><div><strong>College Team</strong><small>Research workspace</small></div></div>
+      </div>
+    </aside>
+
+    <main class="main-content" id="workspace">
+      <header class="topbar">
+        <button class="mobile-menu" id="mobile-menu" type="button" aria-label="Open navigation" aria-controls="sidebar" aria-expanded="false">☰</button>
+        <div class="topbar-title">
+          <span class="topbar-kicker">Workspace /</span>
+          <strong id="page-title">Image Lab</strong>
+        </div>
+        <div class="topbar-actions">
+          <span class="status-pill"><i></i> System operational</span>
+          <button class="button-reset" id="reset-button" type="button"><span aria-hidden="true">↻</span> Reset</button>
+        </div>
+      </header>
+
+      <div class="workspace-scroll">
+        <section class="page-heading" id="image-lab">
+          <div>
+            <p class="eyebrow"><span></span> Construction vision studio</p>
+            <h1>Image <em>augmentation</em></h1>
+            <p class="heading-copy">Create realistic variations for safer, more diverse computer vision datasets.</p>
+          </div>
+          <div class="heading-stats" aria-label="Workspace status">
+            <div><small>IMAGE PIPELINE</small><strong><i></i> Ready</strong></div>
+            <div><small>OUTPUT FORMAT</small><strong>PNG</strong></div>
+          </div>
+        </section>
+
+        <section class="workspace-grid" aria-label="Image workspace">
+          <article class="panel upload-panel">
+            <div class="panel-heading">
+              <div>
+                <span class="panel-index">01</span>
+                <div><h2>Source image</h2><p>Upload construction-site imagery</p></div>
+              </div>
+              <span class="format-pill">JPG · JPEG · PNG</span>
+            </div>
+
+            <input id="image-input" type="file" accept=".jpg,.jpeg,.png,image/jpeg,image/png" hidden>
+            <div class="dropzone" id="dropzone" role="button" tabindex="0" aria-label="Choose or drop an image">
+              <div class="dropzone-empty" id="drop-content">
+                <span class="upload-orbit" aria-hidden="true"><i>↑</i></span>
+                <strong>Drop an image to begin</strong>
+                <span>or <button type="button" class="browse-link" id="browse-button">browse files</button></span>
+                <small>Maximum 10 MB · 20 megapixels</small>
+              </div>
+              <img id="source-preview" alt="Original uploaded image preview" hidden>
+              <div class="preview-toolbar" id="preview-overlay" hidden>
+                <span>Original</span><button type="button" id="replace-button">Replace</button>
+              </div>
+            </div>
+
+            <div class="file-summary" id="source-meta" hidden>
+              <span class="file-type">IMG</span>
+              <div><strong id="file-name"></strong><small id="file-info"></small></div>
+              <span class="file-ready" aria-label="Image ready">✓</span>
+            </div>
+
+            <div class="privacy-note"><span aria-hidden="true">⌾</span> Images are processed locally for this session.</div>
+          </article>
+
+          <article class="panel controls-panel">
+            <div class="panel-heading">
+              <div>
+                <span class="panel-index">02</span>
+                <div><h2>Augmentation recipe</h2><p>Configure one or more effects</p></div>
+              </div>
+              <span class="selected-count" id="selected-count">1 selected</span>
+            </div>
+
+            <div class="effect-grid">
+              <article class="effect-card">
+                <label class="effect-head">
+                  <span class="effect-symbol sunlight" aria-hidden="true">☼</span>
+                  <span><strong>Brightness</strong><small>Lighting variation</small></span>
+                  <input class="effect-toggle" type="checkbox" data-effect="brightness" checked aria-label="Enable brightness">
+                  <i class="switch" aria-hidden="true"></i>
+                </label>
+                <div class="effect-control"><input type="range" min="0.05" max="0.8" step="0.05" value="0.25" data-param="intensity" aria-label="Brightness intensity"><output>0.25</output></div>
+              </article>
+
+              <article class="effect-card">
+                <label class="effect-head">
+                  <span class="effect-symbol violet" aria-hidden="true">◐</span>
+                  <span><strong>Contrast</strong><small>Scene definition</small></span>
+                  <input class="effect-toggle" type="checkbox" data-effect="contrast" aria-label="Enable contrast">
+                  <i class="switch" aria-hidden="true"></i>
+                </label>
+                <div class="effect-control"><input type="range" min="0.35" max="2.2" step="0.05" value="1.35" data-param="factor" aria-label="Contrast factor"><output>1.35</output></div>
+              </article>
+
+              <article class="effect-card">
+                <label class="effect-head">
+                  <span class="effect-symbol cyan" aria-hidden="true">◉</span>
+                  <span><strong>Gamma</strong><small>Tonal response</small></span>
+                  <input class="effect-toggle" type="checkbox" data-effect="gamma" aria-label="Enable gamma correction">
+                  <i class="switch" aria-hidden="true"></i>
+                </label>
+                <div class="effect-control"><input type="range" min="0.4" max="2.8" step="0.1" value="1.4" data-param="gamma" aria-label="Gamma value"><output>1.40</output></div>
+              </article>
+
+              <article class="effect-card">
+                <label class="effect-head">
+                  <span class="effect-symbol amber" aria-hidden="true">◒</span>
+                  <span><strong>Shadows</strong><small>Directional shade</small></span>
+                  <input class="effect-toggle" type="checkbox" data-effect="shadow" aria-label="Enable shadows">
+                  <i class="switch" aria-hidden="true"></i>
+                </label>
+                <div class="effect-control"><input type="range" min="0.05" max="0.85" step="0.05" value="0.35" data-param="intensity" aria-label="Shadow intensity"><output>0.35</output></div>
+              </article>
+
+              <article class="effect-card">
+                <label class="effect-head">
+                  <span class="effect-symbol blue" aria-hidden="true">▤</span>
+                  <span><strong>Gaussian blur</strong><small>Lens softness</small></span>
+                  <input class="effect-toggle" type="checkbox" data-effect="gaussian_blur" aria-label="Enable Gaussian blur">
+                  <i class="switch" aria-hidden="true"></i>
+                </label>
+                <div class="effect-control"><input type="range" min="0.05" max="1" step="0.05" value="0.35" data-param="strength" aria-label="Gaussian blur strength"><output>0.35</output></div>
+              </article>
+
+              <article class="effect-card">
+                <label class="effect-head">
+                  <span class="effect-symbol blue" aria-hidden="true">≋</span>
+                  <span><strong>Motion blur</strong><small>Movement streak</small></span>
+                  <input class="effect-toggle" type="checkbox" data-effect="motion_blur" aria-label="Enable motion blur">
+                  <i class="switch" aria-hidden="true"></i>
+                </label>
+                <div class="effect-control"><input type="range" min="0.05" max="1" step="0.05" value="0.35" data-param="strength" aria-label="Motion blur strength"><output>0.35</output></div>
+              </article>
+
+              <article class="effect-card">
+                <label class="effect-head">
+                  <span class="effect-symbol pink" aria-hidden="true">⠿</span>
+                  <span><strong>Noise</strong><small>Sensor grain</small></span>
+                  <input class="effect-toggle" type="checkbox" data-effect="noise" aria-label="Enable noise">
+                  <i class="switch" aria-hidden="true"></i>
+                </label>
+                <div class="effect-control"><input type="range" min="0.01" max="0.5" step="0.01" value="0.12" data-param="intensity" aria-label="Noise intensity"><output>0.12</output></div>
+              </article>
+
+              <article class="effect-card">
+                <label class="effect-head">
+                  <span class="effect-symbol amber" aria-hidden="true">▨</span>
+                  <span><strong>Occlusion</strong><small>Partial obstruction</small></span>
+                  <input class="effect-toggle" type="checkbox" data-effect="occlusion" aria-label="Enable occlusion">
+                  <i class="switch" aria-hidden="true"></i>
+                </label>
+                <div class="effect-control"><input type="range" min="0.03" max="0.4" step="0.01" value="0.2" data-param="intensity" aria-label="Occlusion intensity"><output>0.20</output></div>
+              </article>
+
+              <article class="effect-card">
+                <label class="effect-head">
+                  <span class="effect-symbol cyan" aria-hidden="true">☁</span>
+                  <span><strong>Haze</strong><small>Dust &amp; atmosphere</small></span>
+                  <input class="effect-toggle" type="checkbox" data-effect="haze" aria-label="Enable haze">
+                  <i class="switch" aria-hidden="true"></i>
+                </label>
+                <div class="effect-control"><input type="range" min="0.02" max="0.65" step="0.01" value="0.25" data-param="intensity" aria-label="Haze intensity"><output>0.25</output></div>
+              </article>
+            </div>
+
+            <div class="generation-row" id="batch">
+              <label class="quantity-control" for="image-count">
+                <span>Generate</span>
+                <select id="image-count" aria-label="Number of images to generate">
+                  <option>1</option><option>2</option><option selected>4</option><option>6</option><option>8</option><option>12</option>
+                </select>
+                <small>variations</small>
+              </label>
+              <button class="generate-button" id="generate-button" type="button">
+                <span class="generate-icon" aria-hidden="true">✦</span>
+                <span class="generate-label">Generate images</span>
+                <span aria-hidden="true">→</span>
+              </button>
+            </div>
+            <div class="generation-progress" id="generation-progress" hidden><span></span></div>
+            <div class="form-error" id="form-error" role="alert" hidden></div>
+          </article>
+        </section>
+
+        <section class="presets-section" aria-labelledby="presets-title">
+          <div class="section-heading">
+            <div><p class="section-kicker">Quick recipes</p><h2 id="presets-title">Augmentation presets</h2></div>
+            <span>Existing effects only</span>
+          </div>
+          <div class="preset-grid">
+            <button class="preset-card" type="button" data-preset="low-light">
+              <span class="preset-icon low-light" aria-hidden="true">☾</span>
+              <span><strong>Low-light scene</strong><small>Brightness · Gamma · Noise</small></span>
+              <i>→</i>
+            </button>
+            <button class="preset-card" type="button" data-preset="dust">
+              <span class="preset-icon dust" aria-hidden="true">☁</span>
+              <span><strong>Dusty atmosphere</strong><small>Haze · Contrast · Occlusion</small></span>
+              <i>→</i>
+            </button>
+            <button class="preset-card" type="button" data-preset="motion">
+              <span class="preset-icon motion" aria-hidden="true">≋</span>
+              <span><strong>Camera motion</strong><small>Motion blur · Noise</small></span>
+              <i>→</i>
+            </button>
+            <button class="preset-card" type="button" data-preset="shadow">
+              <span class="preset-icon shadow" aria-hidden="true">◐</span>
+              <span><strong>High-contrast shade</strong><small>Contrast · Shadow · Gamma</small></span>
+              <i>→</i>
+            </button>
+          </div>
+        </section>
+
+        <section class="panel comparison-panel" id="evaluation" hidden aria-labelledby="compare-title">
+          <div class="panel-heading">
+            <div>
+              <span class="panel-index">03</span>
+              <div><h2 id="compare-title">Before &amp; after</h2><p>Compare the original with a generated variation</p></div>
+            </div>
+            <label class="variation-select">Variation
+              <select id="compare-select" aria-label="Choose comparison variation"></select>
+            </label>
+          </div>
+          <div class="comparison-frame" id="comparison-frame">
+            <img id="compare-original" alt="Original image for comparison">
+            <div class="compare-clip" id="compare-clip"><img id="compare-augmented" alt="Augmented image for comparison"></div>
+            <div class="compare-divider" id="compare-divider"><span>↔</span></div>
+            <span class="compare-label compare-original-label">Original</span>
+            <span class="compare-label compare-augmented-label">Augmented</span>
+          </div>
+          <div class="compare-range-wrap">
+            <span>Original</span>
+            <input type="range" min="0" max="100" value="50" id="compare-range" aria-label="Comparison split position">
+            <span>Augmented</span>
+          </div>
+        </section>
+
+        <section class="results-section" id="results" aria-labelledby="results-title">
+          <div class="section-heading results-heading">
+            <div><p class="section-kicker">Output gallery</p><h2 id="results-title">Generated images</h2></div>
+            <div class="results-actions">
+              <span id="results-subtitle">Waiting for an upload</span>
+              <button class="zip-button" id="download-zip" type="button" hidden>↓ Download ZIP</button>
+            </div>
+          </div>
+
+          <div class="empty-state" id="empty-state">
+            <div class="empty-visual" aria-hidden="true"><span>▧</span><i>✦</i></div>
+            <strong>No variations generated</strong>
+            <p>Upload an image and select a recipe to begin.</p>
+          </div>
+          <div class="results-grid" id="results-grid"></div>
+        </section>
+
+        <footer class="page-footer" id="about">
+          <span>SiteAugment AI · Construction safety dataset studio</span>
+          <span>Metrics assess image changes, not PPE detection performance.</span>
+        </footer>
+      </div>
+    </main>
+  </div>
+
+  <div class="sidebar-scrim" id="sidebar-scrim" hidden></div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="{{ url_for('static', filename='js/main.js') }}" defer></script>
+</body>
+</html>
