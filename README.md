@@ -85,9 +85,15 @@ python app.py
 
 Open [http://127.0.0.1:5000](http://127.0.0.1:5000). For deployment, set a strong `SECRET_KEY`, disable Flask debug mode, and use a production WSGI server.
 
-The first PPE detection request downloads the pinned checkpoint (internet access is required once). To use an already-downloaded compatible Ultralytics checkpoint instead, set `PPE_MODEL_PATH=/absolute/path/to/model.pt` before starting Flask. If dependencies or weights cannot be loaded, the detection API returns a clear `503` error; image augmentation remains available.
+PPE inference is optional and its large dependencies are intentionally separate from the core app requirements. For local PPE detection, install the packages in `requirements-detection.txt` as described below. Deployments that install only `requirements.txt` can still use image augmentation; PPE detection returns `503` because its inference dependencies are not installed.
 
-PyTorch can be a large install. For CPU-only systems, install the CPU wheel for your Python/platform using the [official PyTorch instructions](https://pytorch.org/get-started/locally/) before installing the project requirements; select the appropriate CUDA wheel when you need GPU acceleration. Ultralytics depends on the GUI OpenCV wheel, while this project uses the headless wheel for server deployments. On a headless Linux machine without `libGL.so.1`, if OpenCV imports fail after dependency installation, restore the headless wheel after installing Ultralytics:
+The first local PPE detection request downloads the pinned checkpoint (internet access is required once). To use an already-downloaded compatible Ultralytics checkpoint instead, set `PPE_MODEL_PATH=/absolute/path/to/model.pt` before starting Flask. PyTorch can be a large install: for CPU-only systems, install the CPU wheel for your Python/platform using the [official PyTorch instructions](https://pytorch.org/get-started/locally/) first. Install the optional inference dependencies separately:
+
+```bash
+python -m pip install -r requirements-detection.txt
+```
+
+Select an appropriate CUDA wheel from the PyTorch instructions only if you need GPU acceleration. Ultralytics depends on the GUI OpenCV wheel, while this project uses the headless wheel for server deployments. On a headless Linux machine without `libGL.so.1`, if OpenCV imports fail after installing the optional detection dependencies, restore the headless wheel:
 
 ```bash
 python -m pip uninstall -y opencv-python
@@ -95,6 +101,10 @@ python -m pip install --force-reinstall --no-deps opencv-python-headless
 ```
 
 Because the headless OpenCV wheel provides the same `cv2` runtime as Ultralytics' GUI wheel, `pip check` may still report that Ultralytics' `opencv-python` package requirement is not installed after applying this headless-server workaround. OpenCV inference and this application work with the installed headless replacement; do not install both OpenCV wheels into a server environment lacking `libGL.so.1`.
+
+### Serverless deployment size
+
+Keep serverless deployment builds on `requirements.txt`; do not install `requirements-detection.txt` or bundle PyTorch/model weights in a function package. PyTorch's transitive runtime packages can exceed providers' function-size limits (including the 500 MB limit reported by AWS Lambda-compatible platforms). The augmentation application remains deployable without those optional dependencies. To enable inference in a size-limited serverless deployment, run the detector in a separately deployed inference service and connect it through an authenticated API; the current app does not configure or include such a service.
 
 ## PPE detection usage and API
 

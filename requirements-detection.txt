@@ -1,0 +1,4 @@
+# Optional local PPE inference dependencies. Keep these out of serverless bundles:
+# PyTorch and its runtime dependencies can exceed function package-size limits.
+ultralytics>=8.3,<9
+huggingface-hub>=0.24,<2

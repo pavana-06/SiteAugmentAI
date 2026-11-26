@@ -1,8 +1,6 @@
 Flask>=3.0
 numpy>=1.26
-# Headless OpenCV is a drop-in runtime replacement for Ultralytics' opencv-python dependency.
+# Headless OpenCV avoids GUI system-library requirements in server environments.
 opencv-python-headless>=4.10
 Pillow>=10.0
 pytest>=8.0
-ultralytics>=8.3,<9
-huggingface-hub>=0.24,<2

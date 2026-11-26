@@ -1,3 +1,5 @@
+import builtins
+
 import numpy as np
 import pytest
 
@@ -104,6 +106,21 @@ def test_model_load_errors_are_safe_and_cached(image):
             detector.detect(image)
         assert "private checkpoint path" not in str(error.value)
     assert len(attempts) == 1
+
+
+def test_missing_optional_inference_dependency_returns_clear_error(image, monkeypatch):
+    original_import = builtins.__import__
+
+    def import_without_ultralytics(name, *args, **kwargs):
+        if name == "ultralytics":
+            raise ImportError("optional inference package is absent")
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", import_without_ultralytics)
+    detector = PPEDetector()
+
+    with pytest.raises(DetectorUnavailable, match="PPE detection model is unavailable"):
+        detector.detect(image)
 
 
 def test_visualization_draws_boxes_on_copy_and_validates_bounds(image):
