@@ -33,9 +33,18 @@
   const dropContent = document.getElementById("drop-content");
   const previewOverlay = document.getElementById("preview-overlay");
   const imageCount = document.getElementById("image-count");
+  const confidenceInput = document.getElementById("detection-threshold");
+  const confidenceOutput = document.getElementById("detection-threshold-value");
+  const detectOriginalButton = document.getElementById("detect-original");
+  const detectionSection = document.getElementById("detection-section");
+  const detectionGrid = document.getElementById("detection-grid");
+  const detectionComparison = document.getElementById("detection-comparison");
+  const originalDetectionCount = document.getElementById("original-detection-count");
+  const augmentedDetectionCount = document.getElementById("augmented-detection-count");
   let selectedFile = null;
   let previewUrl = null;
   let activeSession = null;
+  const detectionResults = new Map();
   let toastTimer;
 
   document.querySelectorAll(".effect-control input").forEach((slider) => {
@@ -72,12 +81,32 @@
     toastTimer = window.setTimeout(() => toast.classList.remove("visible"), 2800);
   }
 
+  function clearDetectionResults() {
+    detectionResults.clear();
+    if (detectionGrid) detectionGrid.replaceChildren();
+    if (detectionSection) detectionSection.hidden = true;
+    if (detectionComparison) detectionComparison.hidden = true;
+  }
+
+  function clearAugmentedDetectionResults() {
+    detectionResults.forEach((result, key) => {
+      if (result.source !== "augmented") return;
+      detectionResults.delete(key);
+      const card = [...(detectionGrid?.querySelectorAll(".detection-card") || [])]
+        .find((item) => item.dataset.detectionKey === key);
+      if (card) card.remove();
+    });
+    if (detectionSection) detectionSection.hidden = detectionResults.size === 0;
+    updateDetectionComparison();
+  }
+
   function clearGeneratedWorkspace() {
     if (resultsGrid) resultsGrid.replaceChildren();
     if (emptyState) emptyState.hidden = false;
     if (resultsSubtitle) resultsSubtitle.textContent = "Waiting for an upload";
     if (comparisonPanel) comparisonPanel.hidden = true;
     if (zipButton) zipButton.hidden = true;
+    clearDetectionResults();
     activeSession = null;
   }
 
@@ -92,6 +121,7 @@
     if (dropContent) dropContent.hidden = false;
     if (previewOverlay) previewOverlay.hidden = true;
     if (sourceMeta) sourceMeta.hidden = true;
+    if (detectOriginalButton) detectOriginalButton.disabled = true;
   }
 
   function setFile(file) {
@@ -123,11 +153,13 @@
     if (sourceMeta) sourceMeta.hidden = false;
     if (fileName) fileName.textContent = file.name;
     if (fileInfo) fileInfo.textContent = `${(file.size / 1024).toFixed(0)} KB · Loading dimensions…`;
+    if (detectOriginalButton) detectOriginalButton.disabled = false;
     const dimensionsImage = new Image();
     dimensionsImage.onload = () => {
       if (dimensionsImage.naturalWidth * dimensionsImage.naturalHeight > 20_000_000) {
         clearSourceSelection();
         clearGeneratedWorkspace();
+        if (detectOriginalButton) detectOriginalButton.disabled = true;
         showError("Image dimensions exceed the allowed limit.");
         return;
       }
@@ -136,6 +168,7 @@
     dimensionsImage.onerror = () => {
       clearSourceSelection();
       clearGeneratedWorkspace();
+      if (detectOriginalButton) detectOriginalButton.disabled = true;
       showError("The selected file is not a valid image.");
     };
     dimensionsImage.src = previewUrl;
@@ -144,6 +177,7 @@
     if (resultsSubtitle) resultsSubtitle.textContent = "Waiting for an upload";
     if (comparisonPanel) comparisonPanel.hidden = true;
     if (zipButton) zipButton.hidden = true;
+    clearDetectionResults();
     activeSession = null;
   }
 
@@ -244,7 +278,7 @@
     if (comparisonPanel) comparisonPanel.hidden = false;
     const update = () => {
       const result = results[Number(compareSelect.value)];
-      compareAugmented.src = result.url;
+      compareAugmented.src = result.preview_url || result.url;
       compareAugmented.style.width = `${comparisonFrame.clientWidth}px`;
       compareAugmented.style.height = `${comparisonFrame.clientHeight}px`;
       const position = Number(compareRange.value);
@@ -257,7 +291,7 @@
   }
 
   window.addEventListener("resize", () => {
-    if (!comparisonPanel.hidden) {
+    if (comparisonPanel && !comparisonPanel.hidden) {
       compareAugmented.style.width = `${comparisonFrame.clientWidth}px`;
       compareAugmented.style.height = `${comparisonFrame.clientHeight}px`;
     }
@@ -271,7 +305,7 @@
     const imageWrap = document.createElement("div");
     imageWrap.className = "result-image-wrap";
     const image = document.createElement("img");
-    image.src = result.url;
+    image.src = result.preview_url || result.url;
     image.alt = `Augmented variation ${index + 1}`;
     image.loading = "lazy";
     const number = document.createElement("span");
@@ -304,9 +338,192 @@
     download.href = result.url;
     download.download = `siteaugment-variation-${String(index + 1).padStart(2, "0")}.png`;
     download.textContent = "↓  Download PNG";
-    info.append(labels, dimensions, metrics, brightness, download);
+    const detectButton = document.createElement("button");
+    detectButton.className = "result-detect-button";
+    detectButton.type = "button";
+    detectButton.textContent = "⌖ Detect PPE";
+    detectButton.addEventListener("click", () => detectAugmented(result, detectButton));
+    info.append(labels, dimensions, metrics, brightness, download, detectButton);
     card.append(imageWrap, info);
     return card;
+  }
+
+  function createDetectionCard(result, key) {
+    const card = document.createElement("article");
+    card.className = "detection-card";
+    card.dataset.detectionKey = key;
+    const heading = document.createElement("div");
+    heading.className = "detection-card-heading";
+    const title = document.createElement("div");
+    const sourceTitle = result.source === "original"
+      ? "Original image"
+      : `Augmented image · ${result.source_index}`;
+    const headingTitle = document.createElement("strong");
+    headingTitle.textContent = sourceTitle;
+    const dimensions = document.createElement("small");
+    dimensions.textContent = `${result.image.width} × ${result.image.height} px · threshold ${result.confidence_threshold.toFixed(2)}`;
+    title.append(headingTitle, dimensions);
+    const total = document.createElement("span");
+    total.className = "detection-total";
+    total.textContent = `${result.summary.total_detections} detected`;
+    heading.append(title, total);
+
+    const visual = document.createElement("div");
+    visual.className = "detection-visual";
+    const image = document.createElement("img");
+    image.src = result.annotated_url;
+    image.alt = `PPE detection visualization: ${sourceTitle}`;
+    image.loading = "lazy";
+    visual.append(image);
+
+    const body = document.createElement("div");
+    body.className = "detection-card-body";
+    const counts = document.createElement("div");
+    counts.className = "class-counts";
+    Object.entries(result.summary.class_counts).forEach(([label, count]) => {
+      const chip = document.createElement("span");
+      chip.className = "class-count-chip";
+      chip.append(document.createTextNode(label));
+      const value = document.createElement("b");
+      value.textContent = String(count);
+      chip.append(value);
+      counts.append(chip);
+    });
+
+    const confidence = document.createElement("div");
+    confidence.className = "confidence-summary";
+    const distribution = result.summary.confidence;
+    confidence.textContent = distribution.mean === null
+      ? "CONFIDENCE · No objects above threshold"
+      : `CONFIDENCE · min ${distribution.min.toFixed(2)} · mean ${distribution.mean.toFixed(2)} · max ${distribution.max.toFixed(2)}`;
+
+    const boxes = document.createElement("div");
+    boxes.className = "box-list";
+    result.detections.forEach((detection) => {
+      const row = document.createElement("div");
+      row.className = "box-row";
+      const label = document.createElement("span");
+      label.textContent = detection.label;
+      const score = document.createElement("span");
+      score.textContent = `${(detection.confidence * 100).toFixed(1)}%`;
+      row.append(label, score);
+      boxes.append(row);
+    });
+
+    const download = document.createElement("a");
+    download.className = "detection-download";
+    download.href = result.annotated_download_url;
+    download.download = `siteaugment-detections-${result.annotated_filename}`;
+    download.textContent = "↓ Download annotated PNG";
+    body.append(counts, confidence, boxes, download);
+    card.append(heading, visual, body);
+    return card;
+  }
+
+  function updateDetectionComparison() {
+    if (!detectionComparison || !originalDetectionCount || !augmentedDetectionCount) return;
+    const original = detectionResults.get("original");
+    const augmented = [...detectionResults.values()].filter((item) => item.source === "augmented");
+    if (!original || augmented.length === 0) {
+      detectionComparison.hidden = true;
+      return;
+    }
+    const mean = augmented.reduce((sum, item) => sum + item.summary.total_detections, 0) / augmented.length;
+    originalDetectionCount.textContent = String(original.summary.total_detections);
+    augmentedDetectionCount.textContent = mean.toFixed(1);
+    detectionComparison.hidden = false;
+  }
+
+  function showDetectionResult(result, key) {
+    if (!detectionGrid || !detectionSection) return;
+    const prior = [...detectionGrid.querySelectorAll(".detection-card")]
+      .find((card) => card.dataset.detectionKey === key);
+    if (prior) prior.remove();
+    detectionResults.set(key, result);
+    detectionGrid.append(createDetectionCard(result, key));
+    detectionSection.hidden = false;
+    updateDetectionComparison();
+  }
+
+  function confidenceThreshold() {
+    return confidenceInput ? Number(confidenceInput.value) : 0.25;
+  }
+
+  if (confidenceInput && confidenceOutput) {
+    const updateConfidence = () => { confidenceOutput.value = Number(confidenceInput.value).toFixed(2); };
+    confidenceInput.addEventListener("input", updateConfidence);
+    updateConfidence();
+  }
+
+  async function submitDetection(button, action, body) {
+    clearError();
+    const previousText = button.textContent;
+    button.disabled = true;
+    button.textContent = "Loading model and detecting…";
+    try {
+      const response = await fetch(action, body);
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "PPE detection failed.");
+      return result;
+    } finally {
+      button.disabled = false;
+      button.textContent = previousText;
+    }
+  }
+
+  if (detectOriginalButton) detectOriginalButton.addEventListener("click", async () => {
+    if (!selectedFile) {
+      showError("Upload an image before running PPE detection.");
+      return;
+    }
+    const form = new FormData();
+    form.append("image", selectedFile);
+    form.append("confidence", String(confidenceThreshold()));
+    try {
+      const result = await submitDetection(detectOriginalButton, "/detect", {
+        method: "POST",
+        body: form,
+      });
+      result.source_index = "original";
+      result.annotated_download_url = result.annotated_url.replace("/preview/", "/download/");
+      showDetectionResult(result, "original");
+      showToast(`${result.summary.total_detections} PPE objects detected in original image.`);
+    } catch (error) {
+      showError(error.message || "PPE detection failed.");
+    }
+  });
+
+  async function detectAugmented(result, button) {
+    if (!activeSession) {
+      showError("Generate an augmentation session before detecting this image.");
+      return;
+    }
+    const previousText = button.textContent;
+    button.disabled = true;
+    button.textContent = "Detecting…";
+    try {
+      const response = await fetch("/detect-augmented", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          session_id: activeSession,
+          filename: result.filename,
+          confidence: confidenceThreshold(),
+        }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || "PPE detection failed.");
+      payload.source_index = String([...resultsGrid.children].findIndex((card) =>
+        card.querySelector(".result-detect-button") === button) + 1).padStart(2, "0");
+      payload.annotated_download_url = payload.annotated_url.replace("/preview/", "/download/");
+      showDetectionResult(payload, `augmented:${result.filename}`);
+      showToast(`${payload.summary.total_detections} PPE objects detected in variation.`);
+    } catch (error) {
+      showError(error.message || "PPE detection failed.");
+    } finally {
+      button.disabled = false;
+      button.textContent = previousText;
+    }
   }
 
   generateButton.addEventListener("click", async () => {
@@ -334,6 +551,7 @@
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Could not generate images.");
       activeSession = payload.session_id;
+      clearAugmentedDetectionResults();
       resultsGrid.replaceChildren(...payload.results.map(createResultCard));
       if (emptyState) emptyState.hidden = true;
       if (resultsSubtitle) resultsSubtitle.textContent = `${payload.results.length} variations generated · ${payload.original.width} × ${payload.original.height} px`;
@@ -374,6 +592,8 @@
     if (zipButton) zipButton.hidden = true;
     if (resultsSubtitle) resultsSubtitle.textContent = "Waiting for an upload";
     if (imageCount) imageCount.value = "4";
+    if (detectOriginalButton) detectOriginalButton.disabled = true;
+    clearDetectionResults();
     document.querySelectorAll(".effect-toggle").forEach((toggle) => { toggle.checked = toggle.dataset.effect === "brightness"; });
     document.querySelectorAll(".effect-control input").forEach((slider) => {
       slider.value = slider.defaultValue;

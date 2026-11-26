@@ -1,6 +1,6 @@
 # SiteAugment AI — Construction Safety Image Augmenter
 
-SiteAugment AI is a local web application for producing varied construction-site imagery for computer-vision dataset development. It applies real pixel-level transformations such as lighting changes, shadows, blur, noise, occlusion, and atmospheric haze. It does **not** detect PPE or measure PPE model performance.
+SiteAugment AI is a local web application for producing varied construction-site imagery and running optional pretrained PPE object detection for computer-vision research. Augmentation applies real pixel-level transformations such as lighting changes, shadows, blur, noise, occlusion, and atmospheric haze. PPE detections are model outputs, not safety compliance decisions or evidence of improved model performance.
 
 ## Problem and objectives
 
@@ -13,6 +13,7 @@ Images collected at construction sites vary with weather, lighting, camera movem
 - Generate 1–12 distinct variations with optional seeded reproducibility through the API.
 - Original/augmented wipe comparison and individual PNG or ZIP downloads.
 - Image dimensions, mean pixel brightness, PSNR, and a global SSIM estimate for each result.
+- On-demand PPE detections for original and generated images, including boxes, scores, class counts, and separately downloadable annotated PNGs.
 - Upload limits, image decoding and dimension validation, generated opaque filenames, and session-scoped downloads.
 
 ## Technology
@@ -23,7 +24,24 @@ Images collected at construction sites vary with weather, lighting, camera movem
 
 ## Architecture
 
-The Flask routes in `app.py` validate requests, call the augmentation pipeline, and expose downloads. Individual transformations live in focused modules under `augmentation/`; shared image decode, PNG encoding, and metric calculation are in `utils/image_utils.py`. The browser sends the source image and a JSON recipe to `POST /augment`. Generated images are stored under opaque UUID names; session-to-output associations are held in memory and ZIP files are assembled from those known outputs.
+The Flask routes in `app.py` validate requests, call the augmentation and detection modules, and expose downloads. Individual transformations live in focused modules under `augmentation/`; the lazy-loaded model wrapper, inference and visualization are in `detection/`; shared image decode, PNG encoding, and augmentation metrics are in `utils/image_utils.py`. The browser sends the source image and a JSON recipe to `POST /augment`; `POST /detect` runs the model on the original upload and `POST /detect-augmented` accepts only generated filenames belonging to a known in-memory augmentation session. The model loads at most once per app process and only when detection is first requested. Generated and annotated images use opaque UUID filenames; only registered outputs can be previewed or downloaded.
+
+## PPE detection model
+
+The optional detector uses the public [Tanishjain9 YOLOv8n PPE Detection (6 Classes) checkpoint](https://huggingface.co/Tanishjain9/yolov8n-ppe-detection-6classes), pinned to revision `a2c1a97646ade96e48adda74781dd455d0456c40`. Its model card reports these six output labels:
+
+| Class label | Meaning in the model card |
+| --- | --- |
+| `Gloves` | Gloves |
+| `Vest` | Safety/reflective vest |
+| `goggles` | Eye protection |
+| `helmet` | Safety helmet |
+| `mask` | Face mask |
+| `safety_shoe` | Safety footwear |
+
+This checkpoint does **not** advertise a `person` class, `no-helmet`/`no-vest` classes, or a PPE compliance classification. Runtime class names are read from the checkpoint and included in each detection response. The model card declares the checkpoint license as **MIT**. Its card describes a custom Roboflow-format PPE dataset but does not identify a specific dataset/version or establish the dataset's redistribution license; verify upstream data rights before redistributing derived weights or datasets. The checkpoint itself is downloaded from Hugging Face on first detection and cached by the Hub client; no model weights are bundled in this repository.
+
+The inference runtime is [Ultralytics](https://github.com/ultralytics/ultralytics), which is licensed under AGPL-3.0 (with an Enterprise license option). Ultralytics states that academic research and university coursework are permitted under AGPL when the project is fully open-sourced. Review the [official license guidance](https://www.ultralytics.com/license) and obligations before distributing or deploying the application; academic use does not waive them. The pinned model revision makes the chosen checkpoint reproducible; if you configure a local `PPE_MODEL_PATH`, that file's class names and license become your responsibility.
 
 ### Project structure
 
@@ -42,6 +60,9 @@ SiteAugmentAI/
 │   ├── occlusion.py
 │   ├── haze.py
 │   └── pipeline.py
+├── detection/
+│   ├── detector.py
+│   └── model_config.py
 ├── utils/image_utils.py
 ├── templates/index.html
 ├── static/css/style.css
@@ -64,13 +85,40 @@ python app.py
 
 Open [http://127.0.0.1:5000](http://127.0.0.1:5000). For deployment, set a strong `SECRET_KEY`, disable Flask debug mode, and use a production WSGI server.
 
+The first PPE detection request downloads the pinned checkpoint (internet access is required once). To use an already-downloaded compatible Ultralytics checkpoint instead, set `PPE_MODEL_PATH=/absolute/path/to/model.pt` before starting Flask. If dependencies or weights cannot be loaded, the detection API returns a clear `503` error; image augmentation remains available.
+
+PyTorch can be a large install. For CPU-only systems, install the CPU wheel for your Python/platform using the [official PyTorch instructions](https://pytorch.org/get-started/locally/) before installing the project requirements; select the appropriate CUDA wheel when you need GPU acceleration. Ultralytics depends on the GUI OpenCV wheel, while this project uses the headless wheel for server deployments. On a headless Linux machine without `libGL.so.1`, if OpenCV imports fail after dependency installation, restore the headless wheel after installing Ultralytics:
+
+```bash
+python -m pip uninstall -y opencv-python
+python -m pip install --force-reinstall --no-deps opencv-python-headless
+```
+
+Because the headless OpenCV wheel provides the same `cv2` runtime as Ultralytics' GUI wheel, `pip check` may still report that Ultralytics' `opencv-python` package requirement is not installed after applying this headless-server workaround. OpenCV inference and this application work with the installed headless replacement; do not install both OpenCV wheels into a server environment lacking `libGL.so.1`.
+
+## PPE detection usage and API
+
+1. Upload a supported JPG/JPEG/PNG.
+2. Select **Detect PPE in original** and choose a confidence threshold, or generate image variations first.
+3. Use **Detect PPE** on any generated image to run inference on that augmented output.
+4. Review the class labels, confidence scores, counts, and annotated image; download the overlay separately from the untouched source/output image.
+
+API endpoints:
+
+- `POST /detect`: multipart form fields `image` and optional numeric `confidence`.
+- `POST /detect-augmented`: JSON fields `session_id`, `filename`, and optional `confidence`; the filename must belong to that generated session.
+- `GET /preview/<filename>`: inline preview for a registered generated/annotated PNG.
+- `GET /download/<filename>`: download a registered PNG.
+
+The response includes pixel-coordinate boxes (`x1`, `y1`, `x2`, `y2`), class id and label, confidence from 0 to 1, all class counts (including zero counts), confidence min/mean/max, and an annotated-preview URL. The overlay is drawn on a copy; original image pixels are not modified.
+
 ## Tests
 
 ```bash
 pytest -q
 ```
 
-Tests cover algorithm output/validation, deterministic combined processing, the dashboard, valid and invalid uploads, generation, individual downloads, ZIP downloads, and rejected paths.
+Tests cover algorithm output/validation, deterministic combined processing, the dashboard, valid and invalid uploads, generation, individual downloads, ZIP downloads, rejected paths, and mocked PPE inference/visualization/endpoints. Unit tests mock inference; the first real detector use requires model dependencies and checkpoint access.
 
 ## Augmentation techniques
 
@@ -78,7 +126,7 @@ Brightness varies randomly above or below the source intensity; gamma remaps ton
 
 ## Metrics and limitations
 
-Mean brightness describes output pixel intensity. PSNR and SSIM compare each output to its source and are image-change/quality indicators only—not PPE detection accuracy, safety compliance, or model performance. SSIM here is a lightweight global luminance/contrast/structure estimate rather than a windowed benchmark implementation. Augmentation is synthetic and cannot represent every real site condition; strong settings can create unrealistic images. The current app keeps generated files and session associations locally, with in-memory session metadata; restarting the process invalidates ZIP sessions. Use appropriate data consent and review outputs before training.
+Mean brightness describes output pixel intensity. PSNR and SSIM compare each output to its source and are image-change/quality indicators only—not PPE detection accuracy, safety compliance, or model performance. Detection counts and confidence distributions are descriptive inference outputs only. Comparing detection counts before and after augmentation does not establish improved model accuracy; that requires a controlled, properly designed model-training and evaluation experiment with held-out data and suitable metrics. The selected model may miss or misclassify objects, especially under low light, blur, occlusion, small object sizes, unseen PPE styles, or conditions outside its training domain. Always require human review; do not use these results as the sole basis for safety or employment decisions. SSIM here is a lightweight global luminance/contrast/structure estimate rather than a windowed benchmark implementation. Augmentation is synthetic and cannot represent every real site condition; strong settings can create unrealistic images. The current app keeps generated files and session associations locally, with in-memory session metadata; restarting the process invalidates ZIP sessions. Use appropriate data consent and review outputs before training.
 
 ## Future enhancements
 

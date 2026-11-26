@@ -104,6 +104,16 @@
               <span class="file-ready" aria-label="Image ready">✓</span>
             </div>
 
+            <div class="detect-controls">
+              <label class="confidence-control" for="detection-threshold">
+                <span>DETECTION CONFIDENCE</span>
+                <input id="detection-threshold" type="range" min="0.10" max="0.90" step="0.05" value="0.25" aria-label="PPE detection confidence threshold">
+                <output id="detection-threshold-value" for="detection-threshold">0.25</output>
+              </label>
+              <button class="detect-button" id="detect-original" type="button" disabled>
+                <span aria-hidden="true">⌖</span> Detect PPE in original
+              </button>
+            </div>
             <div class="privacy-note"><span aria-hidden="true">⌾</span> Images are processed locally for this session.</div>
           </article>
 
@@ -256,8 +266,8 @@
           </div>
         </section>
 
-        <section class="panel comparison-panel" id="evaluation" hidden aria-labelledby="compare-title">
-          <div class="panel-heading">
+        <section class="panel comparison-panel" id="comparison-panel" hidden aria-labelledby="compare-title">
+          <div class="panel-heading" id="evaluation">
             <div>
               <span class="panel-index">03</span>
               <div><h2 id="compare-title">Before &amp; after</h2><p>Compare the original with a generated variation</p></div>
@@ -295,6 +305,20 @@
             <p>Upload an image and select a recipe to begin.</p>
           </div>
           <div class="results-grid" id="results-grid"></div>
+        </section>
+
+        <section class="detection-section" id="detection-section" hidden aria-labelledby="detection-title">
+          <div class="section-heading detection-heading">
+            <div><p class="section-kicker">Model inference</p><h2 id="detection-title">PPE detection results</h2></div>
+            <p class="detection-disclaimer">Image detections only — not a safety compliance assessment.</p>
+          </div>
+          <div class="detection-comparison" id="detection-comparison" hidden>
+            <div><small>ORIGINAL</small><strong id="original-detection-count">—</strong><span>detections</span></div>
+            <div class="comparison-arrow" aria-hidden="true">→</div>
+            <div><small>AUGMENTED MEAN</small><strong id="augmented-detection-count">—</strong><span>detections / image</span></div>
+            <p>Descriptive count comparison only; it does not measure model accuracy or prove that augmentation improves detection.</p>
+          </div>
+          <div class="detection-grid" id="detection-grid"></div>
         </section>
 
         <footer class="page-footer" id="about">

@@ -7,6 +7,7 @@ import numpy as np
 from PIL import Image
 
 from app import create_app
+from detection.detector import DetectorUnavailable
 
 
 class TestConfig:
@@ -42,10 +43,54 @@ def client(tmp_path, monkeypatch):
     return create_app(TestConfig).test_client()
 
 
+class FakePpeDetector:
+    def __init__(self):
+        self.calls = []
+
+    def detect(self, image, confidence):
+        self.calls.append((image.copy(), confidence))
+        height, width = image.shape[:2]
+        x2, y2 = min(25, width), min(20, height)
+        detections = []
+        if x2 > 1 and y2 > 1:
+            detections.append({
+                "class_id": 3,
+                "label": "helmet",
+                "confidence": 0.91,
+                "bbox": {"x1": 1.0, "y1": 1.0, "x2": float(x2), "y2": float(y2)},
+            })
+        return {
+            "detections": detections,
+            "summary": {
+                "total_detections": len(detections),
+                "class_counts": {"helmet": len(detections), "vest": 0},
+                "confidence": {
+                    "min": 0.91 if detections else None,
+                    "max": 0.91 if detections else None,
+                    "mean": 0.91 if detections else None,
+                },
+            },
+            "classes": ["helmet", "vest"],
+        }
+
+
+class UnavailablePpeDetector:
+    def detect(self, _image, _confidence):
+        raise DetectorUnavailable("PPE detection model is unavailable. Check model setup and server logs.")
+
+
+def ppe_client(tmp_path, monkeypatch, detector):
+    browser = client(tmp_path, monkeypatch)
+    browser.application.config["PPE_DETECTOR_FACTORY"] = lambda: detector
+    return browser
+
+
 def test_home_renders_dashboard(tmp_path, monkeypatch):
     response = client(tmp_path, monkeypatch).get("/")
     assert response.status_code == 200
     assert b"SiteAugment AI" in response.data
+    assert b'id="comparison-panel"' in response.data
+    assert b'id="detection-section"' in response.data
 
 
 def test_augment_and_downloads(tmp_path, monkeypatch):
@@ -243,3 +288,138 @@ def test_missing_output_file_and_invalid_numeric_parameters(tmp_path, monkeypatc
     output_path = browser.application.config["OUTPUT_FOLDER"] + "/" + filename
     os.remove(output_path)
     assert browser.get(payload["results"][0]["url"]).status_code == 404
+
+
+def test_original_detection_endpoint_visualization_and_download(tmp_path, monkeypatch):
+    detector = FakePpeDetector()
+    browser = ppe_client(tmp_path, monkeypatch, detector)
+    response = browser.post(
+        "/detect",
+        data={
+            "image": (BytesIO(png_bytes()), "site.png"),
+            "confidence": "0.55",
+        },
+        content_type="multipart/form-data",
+    )
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["source"] == "original"
+    assert payload["image"] == {"width": 64, "height": 48}
+    assert payload["summary"]["total_detections"] == 1
+    assert payload["detections"][0]["label"] == "helmet"
+    assert detector.calls[0][1] == 0.55
+    assert np.array_equal(detector.calls[0][0][:, :, 0], np.asarray(Image.open(BytesIO(png_bytes())).convert("RGB"))[:, :, 0])
+
+    preview = browser.get(payload["annotated_url"])
+    assert preview.status_code == 200
+    assert preview.mimetype == "image/png"
+    assert "attachment" not in preview.headers.get("Content-Disposition", "")
+    with Image.open(BytesIO(preview.data)) as annotated:
+        assert annotated.size == (64, 48)
+    download = browser.get(payload["annotated_url"].replace("/preview/", "/download/"))
+    assert download.status_code == 200
+    assert "attachment" in download.headers.get("Content-Disposition", "")
+
+
+def test_detection_rejects_bad_upload_and_confidence(tmp_path, monkeypatch):
+    browser = ppe_client(tmp_path, monkeypatch, FakePpeDetector())
+    invalid_image = browser.post(
+        "/detect",
+        data={"image": (BytesIO(b"bad"), "site.png")},
+        content_type="multipart/form-data",
+    )
+    assert invalid_image.status_code == 400
+    invalid_confidence = browser.post(
+        "/detect",
+        data={
+            "image": (BytesIO(png_bytes()), "site.png"),
+            "confidence": "1.5",
+        },
+        content_type="multipart/form-data",
+    )
+    assert invalid_confidence.status_code == 400
+    invalid_extension = browser.post(
+        "/detect",
+        data={"image": (BytesIO(png_bytes()), "site.gif")},
+        content_type="multipart/form-data",
+    )
+    assert invalid_extension.status_code == 400
+    huge_confidence = browser.post(
+        "/detect",
+        data={
+            "image": (BytesIO(png_bytes()), "site.png"),
+            "confidence": str(10**400),
+        },
+        content_type="multipart/form-data",
+    )
+    assert huge_confidence.status_code == 400
+
+
+def test_detection_enforces_image_pixel_limit(tmp_path, monkeypatch):
+    detector = FakePpeDetector()
+    browser = ppe_client(tmp_path, monkeypatch, detector)
+    browser.application.config["MAX_IMAGE_PIXELS"] = 100
+    response = browser.post(
+        "/detect",
+        data={"image": (BytesIO(png_bytes()), "site.png")},
+        content_type="multipart/form-data",
+    )
+    assert response.status_code == 400
+    assert b"dimensions" in response.data
+    assert detector.calls == []
+
+
+def test_detection_model_loading_failure_returns_safe_503(tmp_path, monkeypatch):
+    browser = ppe_client(tmp_path, monkeypatch, UnavailablePpeDetector())
+    response = browser.post(
+        "/detect",
+        data={"image": (BytesIO(png_bytes()), "site.png")},
+        content_type="multipart/form-data",
+    )
+    assert response.status_code == 503
+    assert b"/tmp/" not in response.data
+
+
+def test_augmented_detection_requires_session_membership(tmp_path, monkeypatch):
+    detector = FakePpeDetector()
+    browser = ppe_client(tmp_path, monkeypatch, detector)
+    generated = browser.post(
+        "/augment",
+        data={
+            "image": (BytesIO(png_bytes()), "site.png"),
+            "config": json.dumps({"augmentations": [{"name": "haze"}], "count": 1, "seed": 5}),
+        },
+        content_type="multipart/form-data",
+    ).get_json()
+    target = generated["results"][0]
+    response = browser.post(
+        "/detect-augmented",
+        json={
+            "session_id": generated["session_id"],
+            "filename": target["filename"],
+            "confidence": 0.4,
+        },
+    )
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["source"] == "augmented"
+    assert payload["summary"]["total_detections"] == 1
+    assert detector.calls[-1][1] == 0.4
+    assert browser.get(payload["annotated_url"]).status_code == 200
+
+    wrong_session = browser.post(
+        "/detect-augmented",
+        json={"session_id": "0" * 32, "filename": target["filename"]},
+    )
+    assert wrong_session.status_code == 404
+    arbitrary_filename = browser.post(
+        "/detect-augmented",
+        json={"session_id": generated["session_id"], "filename": "../etc/passwd"},
+    )
+    assert arbitrary_filename.status_code == 400
+
+
+def test_detection_endpoint_requires_valid_json_object(tmp_path, monkeypatch):
+    browser = ppe_client(tmp_path, monkeypatch, FakePpeDetector())
+    response = browser.post("/detect-augmented", data="[]", content_type="application/json")
+    assert response.status_code == 400
