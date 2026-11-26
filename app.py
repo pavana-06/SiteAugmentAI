@@ -7,7 +7,7 @@ import uuid
 import zipfile
 
 from flask import Flask, jsonify, render_template, request, send_file
-from werkzeug.exceptions import RequestEntityTooLarge
+from werkzeug.exceptions import HTTPException, RequestEntityTooLarge
 from werkzeug.utils import secure_filename
 
 from augmentation import SUPPORTED_AUGMENTATIONS, apply_augmentations
@@ -38,6 +38,15 @@ def create_app(config_object=Config):
     @app.errorhandler(RequestEntityTooLarge)
     def handle_large_upload(_error):
         return jsonify(error="Upload is too large. Maximum file size is 10 MB."), 413
+
+    @app.errorhandler(HTTPException)
+    def handle_http_error(error):
+        return jsonify(error=error.description), error.code or 500
+
+    @app.errorhandler(Exception)
+    def handle_unexpected_error(_error):
+        app.logger.exception("Unhandled request error")
+        return jsonify(error="An unexpected server error occurred. Check server logs."), 500
 
     @app.get("/")
     def index():
@@ -144,8 +153,12 @@ def create_app(config_object=Config):
                 return jsonify(error=f"Invalid augmentation settings: {exc}"), 400
             filename = f"{uuid.uuid4().hex}.png"
             output_path = os.path.join(app.config["OUTPUT_FOLDER"], filename)
-            with open(output_path, "wb") as output_file:
-                output_file.write(encode_png(augmented))
+            try:
+                with open(output_path, "wb") as output_file:
+                    output_file.write(encode_png(augmented))
+            except OSError:
+                app.logger.exception("Could not save generated augmented image")
+                return jsonify(error="Could not save the generated image."), 500
             output_names.append(filename)
             results.append({
                 "filename": filename,
@@ -224,6 +237,7 @@ def create_app(config_object=Config):
         except ValueError as exc:
             return jsonify(error=str(exc)), 400
         except OSError:
+            app.logger.exception("Could not read augmented image for detection")
             return jsonify(error="Augmented image is not available for detection."), 404
         try:
             return run_detection(image, confidence, "augmented")

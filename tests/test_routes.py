@@ -1,12 +1,16 @@
 from io import BytesIO
 import json
+import logging
 import os
+import tempfile
 import zipfile
+from pathlib import Path
 
 import numpy as np
 from PIL import Image
 
 from app import create_app
+from config import default_data_dir
 from detection.detector import DetectorUnavailable
 
 
@@ -91,6 +95,12 @@ def test_home_renders_dashboard(tmp_path, monkeypatch):
     assert b"SiteAugment AI" in response.data
     assert b'id="comparison-panel"' in response.data
     assert b'id="detection-section"' in response.data
+
+
+def test_vercel_defaults_to_temporary_data_directory(monkeypatch):
+    monkeypatch.delenv("SITEAUGMENT_DATA_DIR", raising=False)
+    monkeypatch.setenv("VERCEL", "1")
+    assert default_data_dir() == Path(tempfile.gettempdir()) / "siteaugment-ai"
 
 
 def test_augment_and_downloads(tmp_path, monkeypatch):
@@ -208,6 +218,66 @@ def test_pixel_dimension_limit(tmp_path, monkeypatch):
     assert b"dimensions" in response.data
 
 
+def test_augmentation_output_write_failure_returns_json_and_logs(tmp_path, monkeypatch, caplog):
+    browser = client(tmp_path, monkeypatch)
+    output_folder = browser.application.config["OUTPUT_FOLDER"]
+    real_open = open
+
+    def fail_output_write(path, mode="r", *args, **kwargs):
+        if str(path).startswith(output_folder) and any(flag in mode for flag in "wax+"):
+            raise PermissionError("private filesystem detail")
+        return real_open(path, mode, *args, **kwargs)
+
+    monkeypatch.setattr("builtins.open", fail_output_write)
+    with caplog.at_level(logging.ERROR):
+        response = browser.post(
+            "/augment",
+            data={
+                "image": (BytesIO(png_bytes()), "site.png"),
+                "config": json.dumps({
+                    "augmentations": [{"name": "brightness", "params": {"intensity": 0.1}}],
+                    "count": 1,
+                }),
+            },
+            content_type="multipart/form-data",
+        )
+
+    assert response.status_code == 500
+    assert response.is_json
+    assert response.get_json() == {"error": "Could not save the generated image."}
+    assert "Could not save generated augmented image" in caplog.text
+    assert "private filesystem detail" in caplog.text
+    assert "private filesystem detail" not in response.get_data(as_text=True)
+
+
+def test_unexpected_api_error_returns_safe_json_and_logs(tmp_path, monkeypatch, caplog):
+    browser = client(tmp_path, monkeypatch)
+    browser.application.config["TESTING"] = False
+
+    def fail_augmentation(*_args, **_kwargs):
+        raise RuntimeError("private implementation detail")
+
+    monkeypatch.setattr("app.apply_augmentations", fail_augmentation)
+    with caplog.at_level(logging.ERROR):
+        response = browser.post(
+            "/augment",
+            data={
+                "image": (BytesIO(png_bytes()), "site.png"),
+                "config": json.dumps({
+                    "augmentations": [{"name": "brightness", "params": {"intensity": 0.1}}],
+                    "count": 1,
+                }),
+            },
+            content_type="multipart/form-data",
+        )
+
+    assert response.status_code == 500
+    assert response.is_json
+    assert "private implementation detail" not in response.get_data(as_text=True)
+    assert "Unhandled request error" in caplog.text
+    assert "private implementation detail" in caplog.text
+
+
 def test_seeded_generation_is_reproducible(tmp_path, monkeypatch):
     browser = client(tmp_path, monkeypatch)
     config = {
@@ -319,6 +389,32 @@ def test_original_detection_endpoint_visualization_and_download(tmp_path, monkey
     download = browser.get(payload["annotated_url"].replace("/preview/", "/download/"))
     assert download.status_code == 200
     assert "attachment" in download.headers.get("Content-Disposition", "")
+
+
+def test_detection_visualization_write_failure_returns_json_and_logs(tmp_path, monkeypatch, caplog):
+    browser = ppe_client(tmp_path, monkeypatch, FakePpeDetector())
+    output_folder = browser.application.config["OUTPUT_FOLDER"]
+    real_open = open
+
+    def fail_output_write(path, mode="r", *args, **kwargs):
+        if str(path).startswith(output_folder) and any(flag in mode for flag in "wax+"):
+            raise PermissionError("private filesystem detail")
+        return real_open(path, mode, *args, **kwargs)
+
+    monkeypatch.setattr("builtins.open", fail_output_write)
+    with caplog.at_level(logging.ERROR):
+        response = browser.post(
+            "/detect",
+            data={"image": (BytesIO(png_bytes()), "site.png")},
+            content_type="multipart/form-data",
+        )
+
+    assert response.status_code == 500
+    assert response.is_json
+    assert response.get_json() == {"error": "Could not save the detection visualization."}
+    assert "Could not save original-image PPE visualization" in caplog.text
+    assert "private filesystem detail" in caplog.text
+    assert "private filesystem detail" not in response.get_data(as_text=True)
 
 
 def test_detection_rejects_bad_upload_and_confidence(tmp_path, monkeypatch):
