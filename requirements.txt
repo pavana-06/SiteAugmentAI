@@ -3,4 +3,5 @@ numpy>=1.26
 # Headless OpenCV avoids GUI system-library requirements in server environments.
 opencv-python-headless>=4.10
 Pillow>=10.0
+onnxruntime>=1.18,<2
 pytest>=8.0

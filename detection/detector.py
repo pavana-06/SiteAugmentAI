@@ -1,6 +1,7 @@
 import logging
 import math
 import threading
+from pathlib import Path
 
 import cv2
 import numpy as np
@@ -9,17 +10,21 @@ from .model_config import (
     DEFAULT_CONFIDENCE,
     MAX_CONFIDENCE,
     MIN_CONFIDENCE,
+    MODEL_CARD_CLASSES,
     MODEL_FILENAME,
     MODEL_REPO_ID,
     MODEL_REVISION,
+    ONNX_INPUT_SIZE,
+    ONNX_MAX_CANDIDATES,
+    ONNX_MAX_DETECTIONS,
+    ONNX_NMS_IOU_THRESHOLD,
 )
 
 
 logger = logging.getLogger(__name__)
 MODEL_UNAVAILABLE_MESSAGE = (
-    "PPE detection model is unavailable. For local use, install "
-    "requirements-detection.txt and check model access. On serverless "
-    "platforms with function-size limits, run inference in a separate service."
+    "PPE detection model is unavailable. Ensure the ONNX Runtime dependency "
+    "and bundled PPE model are included in this deployment; check server logs."
 )
 
 
@@ -77,6 +82,18 @@ class PPEDetector:
     def _load_model(self):
         if self.model_loader is not None:
             return self.model_loader(self.model_path)
+
+        if self.model_path and Path(self.model_path).suffix.lower() == ".onnx":
+            try:
+                import onnxruntime
+            except ImportError as exc:
+                raise DetectorUnavailable(
+                    "ONNX Runtime is not installed for PPE detection."
+                ) from exc
+            return onnxruntime.InferenceSession(
+                str(self.model_path),
+                providers=["CPUExecutionProvider"],
+            )
 
         try:
             from ultralytics import YOLO
@@ -136,10 +153,181 @@ class PPEDetector:
             return {index: str(value) for index, value in enumerate(names)}
         raise DetectorUnavailable("PPE detection model has invalid class metadata.")
 
+    @staticmethod
+    def _letterbox(image):
+        image_height, image_width = image.shape[:2]
+        scale = min(
+            ONNX_INPUT_SIZE / image_width,
+            ONNX_INPUT_SIZE / image_height,
+        )
+        resized_width = max(1, round(image_width * scale))
+        resized_height = max(1, round(image_height * scale))
+        resized = cv2.resize(
+            image,
+            (resized_width, resized_height),
+            interpolation=cv2.INTER_LINEAR,
+        )
+        horizontal_padding = ONNX_INPUT_SIZE - resized_width
+        vertical_padding = ONNX_INPUT_SIZE - resized_height
+        left = round(horizontal_padding / 2 - 0.1)
+        top = round(vertical_padding / 2 - 0.1)
+        canvas = np.full(
+            (ONNX_INPUT_SIZE, ONNX_INPUT_SIZE, 3),
+            114,
+            dtype=np.uint8,
+        )
+        canvas[top:top + resized_height, left:left + resized_width] = resized
+        tensor = canvas.astype(np.float32) / 255.0
+        tensor = np.transpose(tensor, (2, 0, 1))[None, ...]
+        return tensor, scale, float(left), float(top)
+
+    @staticmethod
+    def _nms_indices(boxes, scores):
+        if not len(boxes):
+            return []
+        x1, y1, x2, y2 = boxes.T
+        areas = np.maximum(0.0, x2 - x1) * np.maximum(0.0, y2 - y1)
+        order = np.argsort(scores)[::-1]
+        selected = []
+        while order.size:
+            current = int(order[0])
+            selected.append(current)
+            remaining = order[1:]
+            if not remaining.size:
+                break
+            intersection_x1 = np.maximum(x1[current], x1[remaining])
+            intersection_y1 = np.maximum(y1[current], y1[remaining])
+            intersection_x2 = np.minimum(x2[current], x2[remaining])
+            intersection_y2 = np.minimum(y2[current], y2[remaining])
+            intersection = (
+                np.maximum(0.0, intersection_x2 - intersection_x1)
+                * np.maximum(0.0, intersection_y2 - intersection_y1)
+            )
+            union = areas[current] + areas[remaining] - intersection
+            iou = intersection / np.maximum(union, 1e-9)
+            order = remaining[iou <= ONNX_NMS_IOU_THRESHOLD]
+        return selected
+
+    @staticmethod
+    def _run_onnx(model, image, confidence):
+        tensor, scale, pad_x, pad_y = PPEDetector._letterbox(image)
+        inputs = model.get_inputs()
+        if not inputs:
+            raise DetectorUnavailable("PPE ONNX model has no input.")
+        outputs = model.run(None, {inputs[0].name: tensor})
+        if not outputs:
+            raise DetectorUnavailable("PPE ONNX model returned no output.")
+        prediction = np.asarray(outputs[0])
+        class_count = len(MODEL_CARD_CLASSES)
+        expected_features = 4 + class_count
+        if prediction.ndim != 3 or prediction.shape[0] < 1:
+            raise DetectorUnavailable("PPE ONNX model returned invalid predictions.")
+        prediction = prediction[0]
+        if prediction.shape[0] == expected_features:
+            prediction = prediction.T
+        elif prediction.shape[1] != expected_features:
+            raise DetectorUnavailable("PPE ONNX model returned invalid predictions.")
+
+        centers = prediction[:, :2]
+        sizes = prediction[:, 2:4]
+        class_scores = prediction[:, 4:]
+        valid = (
+            np.isfinite(prediction).all(axis=1)
+            & (class_scores >= 0).all(axis=1)
+            & (class_scores <= 1).all(axis=1)
+        )
+        class_ids = np.argmax(class_scores, axis=1)
+        scores = np.max(class_scores, axis=1)
+        candidate_boxes = np.column_stack((
+            centers[:, 0] - sizes[:, 0] / 2,
+            centers[:, 1] - sizes[:, 1] / 2,
+            centers[:, 0] + sizes[:, 0] / 2,
+            centers[:, 1] + sizes[:, 1] / 2,
+        ))
+        candidate_boxes[:, (0, 2)] = (candidate_boxes[:, (0, 2)] - pad_x) / scale
+        candidate_boxes[:, (1, 3)] = (candidate_boxes[:, (1, 3)] - pad_y) / scale
+        image_height, image_width = image.shape[:2]
+        candidate_boxes[:, (0, 2)] = np.clip(
+            candidate_boxes[:, (0, 2)], 0, image_width
+        )
+        candidate_boxes[:, (1, 3)] = np.clip(
+            candidate_boxes[:, (1, 3)], 0, image_height
+        )
+        valid &= (
+            (candidate_boxes[:, 2] > candidate_boxes[:, 0])
+            & (candidate_boxes[:, 3] > candidate_boxes[:, 1])
+        )
+
+        detections = []
+        for class_id, label in enumerate(MODEL_CARD_CLASSES):
+            indices = np.flatnonzero(
+                valid & (class_ids == class_id) & (scores >= confidence)
+            )
+            if not indices.size:
+                continue
+            if indices.size > ONNX_MAX_CANDIDATES:
+                candidate_scores = scores[indices]
+                top_candidates = np.argpartition(
+                    candidate_scores,
+                    -ONNX_MAX_CANDIDATES,
+                )[-ONNX_MAX_CANDIDATES:]
+                indices = indices[top_candidates]
+            boxes = candidate_boxes[indices]
+            class_scores_for_boxes = scores[indices]
+            for selected in PPEDetector._nms_indices(boxes, class_scores_for_boxes):
+                box = boxes[selected]
+                score = float(class_scores_for_boxes[selected])
+                detections.append({
+                    "class_id": class_id,
+                    "label": label,
+                    "confidence": round(score, 6),
+                    "bbox": {
+                        "x1": round(float(box[0]), 2),
+                        "y1": round(float(box[1]), 2),
+                        "x2": round(float(box[2]), 2),
+                        "y2": round(float(box[3]), 2),
+                    },
+                })
+        detections.sort(key=lambda item: item["confidence"], reverse=True)
+        return detections[:ONNX_MAX_DETECTIONS]
+
+    @staticmethod
+    def _format_result(detections, names):
+        class_counts = {label: 0 for label in names.values()}
+        for detection in detections:
+            class_counts[detection["label"]] += 1
+        scores = [item["confidence"] for item in detections]
+        summary = {
+            "total_detections": len(detections),
+            "class_counts": class_counts,
+            "confidence": {
+                "min": round(min(scores), 6) if scores else None,
+                "max": round(max(scores), 6) if scores else None,
+                "mean": round(sum(scores) / len(scores), 6) if scores else None,
+            },
+        }
+        return {
+            "detections": detections,
+            "summary": summary,
+            "classes": [names[key] for key in sorted(names)],
+        }
+
     def detect(self, image, confidence=DEFAULT_CONFIDENCE):
         self.validate_image(image)
         confidence = self.validate_confidence(confidence)
         model = self._get_model()
+        if self.model_path and Path(self.model_path).suffix.lower() == ".onnx":
+            try:
+                with self._inference_lock:
+                    detections = self._run_onnx(model, image, confidence)
+            except Exception as exc:
+                logger.exception("PPE ONNX inference failed")
+                if isinstance(exc, DetectorUnavailable):
+                    raise
+                raise DetectorUnavailable("PPE detection failed. Check server logs.") from exc
+            names = dict(enumerate(MODEL_CARD_CLASSES))
+            return self._format_result(detections, names)
+
         bgr_image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
         try:
             with self._inference_lock:
@@ -204,24 +392,7 @@ class PPEDetector:
                     },
                 })
 
-        class_counts = {label: 0 for label in names.values()}
-        for detection in detections:
-            class_counts[detection["label"]] += 1
-        scores = [item["confidence"] for item in detections]
-        summary = {
-            "total_detections": len(detections),
-            "class_counts": class_counts,
-            "confidence": {
-                "min": round(min(scores), 6) if scores else None,
-                "max": round(max(scores), 6) if scores else None,
-                "mean": round(sum(scores) / len(scores), 6) if scores else None,
-            },
-        }
-        return {
-            "detections": detections,
-            "summary": summary,
-            "classes": [names[key] for key in sorted(names)],
-        }
+        return self._format_result(detections, names)
 
     @staticmethod
     def visualize(image, detections):

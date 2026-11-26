@@ -24,11 +24,11 @@ Images collected at construction sites vary with weather, lighting, camera movem
 
 ## Architecture
 
-The Flask routes in `app.py` validate requests, call the augmentation and detection modules, and expose downloads. Individual transformations live in focused modules under `augmentation/`; the lazy-loaded model wrapper, inference and visualization are in `detection/`; shared image decode, PNG encoding, and augmentation metrics are in `utils/image_utils.py`. The browser sends the source image and a JSON recipe to `POST /augment`; `POST /detect` runs the model on the original upload and `POST /detect-augmented` accepts only generated filenames belonging to a known in-memory augmentation session. The model loads at most once per app process and only when detection is first requested. Generated and annotated images use opaque UUID filenames; only registered outputs can be previewed or downloaded.
+The Flask routes in `app.py` validate requests, call the augmentation and detection modules, and expose downloads. Individual transformations live in focused modules under `augmentation/`; the lazy-loaded ONNX Runtime detector, inference and visualization are in `detection/`; shared image decode, PNG encoding, and augmentation metrics are in `utils/image_utils.py`. The browser sends the source image and a JSON recipe to `POST /augment`; `POST /detect` runs the model on the original upload and `POST /detect-augmented` accepts only generated filenames belonging to a known in-memory augmentation session. The ONNX model loads at most once per app process and only when detection is first requested. Generated and annotated images use opaque UUID filenames; only registered outputs can be previewed or downloaded.
 
 ## PPE detection model
 
-The optional detector uses the public [Tanishjain9 YOLOv8n PPE Detection (6 Classes) checkpoint](https://huggingface.co/Tanishjain9/yolov8n-ppe-detection-6classes), pinned to revision `a2c1a97646ade96e48adda74781dd455d0456c40`. Its model card reports these six output labels:
+The detector uses the public [Tanishjain9 YOLOv8n PPE Detection (6 Classes) checkpoint](https://huggingface.co/Tanishjain9/yolov8n-ppe-detection-6classes), pinned to revision `a2c1a97646ade96e48adda74781dd455d0456c40`. Its model card reports these six output labels:
 
 | Class label | Meaning in the model card |
 | --- | --- |
@@ -39,9 +39,9 @@ The optional detector uses the public [Tanishjain9 YOLOv8n PPE Detection (6 Clas
 | `mask` | Face mask |
 | `safety_shoe` | Safety footwear |
 
-This checkpoint does **not** advertise a `person` class, `no-helmet`/`no-vest` classes, or a PPE compliance classification. Runtime class names are read from the checkpoint and included in each detection response. The model card declares the checkpoint license as **MIT**. Its card describes a custom Roboflow-format PPE dataset but does not identify a specific dataset/version or establish the dataset's redistribution license; verify upstream data rights before redistributing derived weights or datasets. The checkpoint itself is downloaded from Hugging Face on first detection and cached by the Hub client; no model weights are bundled in this repository.
+This checkpoint does **not** advertise a `person` class, `no-helmet`/`no-vest` classes, or a PPE compliance classification. The model card declares the checkpoint license as **MIT**. Its card describes a custom Roboflow-format PPE dataset but does not identify a specific dataset/version or establish the dataset's redistribution license; verify upstream data rights before redistributing derived weights or datasets. The repository bundles a 10.5 MiB ONNX export of this pinned checkpoint at `models/ppe-yolov8n.onnx`. It runs with CPU ONNX Runtime and does not require PyTorch or Ultralytics in the Vercel function. The ONNX export preserves the checkpoint's six classes listed above.
 
-The inference runtime is [Ultralytics](https://github.com/ultralytics/ultralytics), which is licensed under AGPL-3.0 (with an Enterprise license option). Ultralytics states that academic research and university coursework are permitted under AGPL when the project is fully open-sourced. Review the [official license guidance](https://www.ultralytics.com/license) and obligations before distributing or deploying the application; academic use does not waive them. The pinned model revision makes the chosen checkpoint reproducible; if you configure a local `PPE_MODEL_PATH`, that file's class names and license become your responsibility.
+The ONNX export was generated from the pinned upstream checkpoint using [Ultralytics](https://github.com/ultralytics/ultralytics). Ultralytics is licensed under AGPL-3.0 (with an Enterprise license option); review the [official license guidance](https://www.ultralytics.com/license) before redistributing the export. For optional local `.pt` checkpoint loading or model export, install `requirements-detection.txt`. If you configure a custom `PPE_MODEL_PATH`, that file's class names and license become your responsibility.
 
 ### Project structure
 
@@ -50,7 +50,9 @@ SiteAugmentAI/
 ├── app.py
 ├── config.py
 ├── requirements.txt
+├── vercel.json
 ├── README.md
+├── models/ppe-yolov8n.onnx
 ├── augmentation/
 │   ├── lighting.py
 │   ├── contrast.py
@@ -85,15 +87,15 @@ python app.py
 
 Open [http://127.0.0.1:5000](http://127.0.0.1:5000). For deployment, set a strong `SECRET_KEY`, disable Flask debug mode, and use a production WSGI server.
 
-PPE inference is optional and its large dependencies are intentionally separate from the core app requirements. For local PPE detection, install the packages in `requirements-detection.txt` as described below. Deployments that install only `requirements.txt` can still use image augmentation; PPE detection returns `503` because its inference dependencies are not installed.
+PPE inference uses the bundled ONNX model and the lightweight CPU runtime included in `requirements.txt`; no model download is needed at runtime.
 
-The first local PPE detection request downloads the pinned checkpoint (internet access is required once). To use an already-downloaded compatible Ultralytics checkpoint instead, set `PPE_MODEL_PATH=/absolute/path/to/model.pt` before starting Flask. PyTorch can be a large install: for CPU-only systems, install the CPU wheel for your Python/platform using the [official PyTorch instructions](https://pytorch.org/get-started/locally/) first. Install the optional inference dependencies separately:
+To use a custom Ultralytics `.pt` checkpoint instead, set `PPE_MODEL_PATH=/absolute/path/to/model.pt` before starting Flask and install the optional dependencies:
 
 ```bash
 python -m pip install -r requirements-detection.txt
 ```
 
-Select an appropriate CUDA wheel from the PyTorch instructions only if you need GPU acceleration. Ultralytics depends on the GUI OpenCV wheel, while this project uses the headless wheel for server deployments. On a headless Linux machine without `libGL.so.1`, if OpenCV imports fail after installing the optional detection dependencies, restore the headless wheel:
+Ultralytics may install the GUI OpenCV wheel. On a headless Linux machine without `libGL.so.1`, if OpenCV imports fail after installing those optional dependencies, restore the headless wheel:
 
 ```bash
 python -m pip uninstall -y opencv-python
@@ -102,11 +104,13 @@ python -m pip install --force-reinstall --no-deps opencv-python-headless
 
 Because the headless OpenCV wheel provides the same `cv2` runtime as Ultralytics' GUI wheel, `pip check` may still report that Ultralytics' `opencv-python` package requirement is not installed after applying this headless-server workaround. OpenCV inference and this application work with the installed headless replacement; do not install both OpenCV wheels into a server environment lacking `libGL.so.1`.
 
-### Deploy the complete app on Render
+### Deploy on Vercel
 
-The PPE detector needs PyTorch, which exceeds the function-package limit on Vercel and similar serverless platforms. This repository includes a Render Blueprint in `render.yaml` that installs both the core and inference dependencies from `requirements-render.txt`, then runs Flask with Gunicorn. In Render, create a new Blueprint from this repository and use the **Standard** web-service plan for sufficient memory during CPU inference. The Blueprint generates a `SECRET_KEY`; no model weights are bundled, and the checkpoint downloads on the first PPE detection request.
+The app uses CPU ONNX Runtime and a bundled 10.5 MiB model instead of PyTorch, avoiding the multi-gigabyte inference dependency bundle. `vercel.json` explicitly includes the model in the Flask function package. Import the GitHub repository into Vercel, keep the Python build using `requirements.txt`, and set `SECRET_KEY` in the project environment variables. If `PPE_MODEL_PATH` was previously set to a `.pt` file, remove it so the bundled ONNX model is used. Redeploy after pushing changes, then test **Detect PPE in original**. The first request may take longer while the serverless function initializes the ONNX session.
 
-The service is configured with one Gunicorn worker because generated files and session membership are stored in local disk and process memory. This storage is ephemeral and restarting or scaling the service invalidates existing image sessions. For persistent or multi-instance production use, move generated files and sessions to shared storage. Keep Vercel deployments on `requirements.txt` only; the app can augment images there, but PPE inference will return `503` unless you deploy a separate inference service.
+Vercel functions have ephemeral storage and separate instances; in-memory session associations are not shared across instances. Original-image detection works independently, but augmented-image detection and downloads may not persist reliably across separate function invocations. For durable multi-request workflows, use shared object storage and a persistent session store or deploy on a long-running web service.
+
+The Render Blueprint in `render.yaml` also uses the bundled ONNX Runtime model, so it does not install PyTorch. Free instances may sleep when idle and have ephemeral local storage; if inference exceeds the selected instance's memory, use a larger plan.
 
 ## PPE detection usage and API
 
@@ -130,7 +134,7 @@ The response includes pixel-coordinate boxes (`x1`, `y1`, `x2`, `y2`), class id 
 pytest -q
 ```
 
-Tests cover algorithm output/validation, deterministic combined processing, the dashboard, valid and invalid uploads, generation, individual downloads, ZIP downloads, rejected paths, and mocked PPE inference/visualization/endpoints. Unit tests mock inference; the first real detector use requires model dependencies and checkpoint access.
+Tests cover algorithm output/validation, deterministic combined processing, the dashboard, valid and invalid uploads, generation, individual downloads, ZIP downloads, rejected paths, mocked PPE inference, ONNX preprocessing/postprocessing, visualization, and endpoints. The bundled ONNX model also supports a real inference smoke test without downloading weights.
 
 ## Augmentation techniques
 
