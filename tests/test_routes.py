@@ -1,4 +1,5 @@
 from io import BytesIO
+import base64
 import json
 import logging
 import os
@@ -128,6 +129,55 @@ def test_augment_and_downloads(tmp_path, monkeypatch):
     assert zip_response.status_code == 200
     with zipfile.ZipFile(BytesIO(zip_response.data)) as archive:
         assert len(archive.namelist()) == 2
+
+
+def test_four_variations_have_valid_pngs_and_instance_independent_previews(tmp_path, monkeypatch):
+    browser = client(tmp_path, monkeypatch)
+    response = browser.post(
+        "/augment",
+        data={
+            "image": (BytesIO(png_bytes()), "site.png"),
+            "config": json.dumps({
+                "augmentations": [{"name": "brightness", "params": {"intensity": 0.15}}],
+                "count": 4,
+                "seed": 41,
+            }),
+        },
+        content_type="multipart/form-data",
+    )
+    assert response.status_code == 200
+    results = response.get_json()["results"]
+    assert len(results) == 4
+
+    for result in results:
+        output_path = Path(browser.application.config["OUTPUT_FOLDER"]) / result["filename"]
+        assert output_path.is_file()
+        with Image.open(output_path) as saved_png:
+            assert saved_png.format == "PNG"
+            assert saved_png.size == (64, 48)
+
+        prefix, separator, encoded_preview = result["preview_data_url"].partition(",")
+        assert prefix == "data:image/jpeg;base64"
+        assert separator
+        preview_bytes = base64.b64decode(encoded_preview, validate=True)
+        assert len(preview_bytes) <= 64 * 1024
+        with Image.open(BytesIO(preview_bytes)) as preview:
+            assert preview.format == "JPEG"
+            assert preview.width <= 512
+            assert preview.height <= 512
+
+        route_preview = browser.get(result["preview_url"])
+        assert route_preview.status_code == 200
+        assert route_preview.mimetype == "image/png"
+
+    separate_instance = create_app(TestConfig).test_client()
+    assert [separate_instance.get(result["preview_url"]).status_code for result in results] == [
+        404,
+        404,
+        404,
+        404,
+    ]
+    assert all(result["preview_data_url"].startswith("data:image/jpeg;base64,") for result in results)
 
 
 def test_rejects_invalid_image_and_configuration(tmp_path, monkeypatch):

@@ -267,6 +267,10 @@
     });
   }
 
+  function resultPreviewSource(result) {
+    return result.preview_data_url || result.preview_url || result.url;
+  }
+
   function renderComparison(results) {
     compareOriginal.src = previewUrl;
     compareSelect.replaceChildren(...results.map((result, index) => {
@@ -278,7 +282,7 @@
     if (comparisonPanel) comparisonPanel.hidden = false;
     const update = () => {
       const result = results[Number(compareSelect.value)];
-      compareAugmented.src = result.preview_url || result.url;
+      compareAugmented.src = resultPreviewSource(result);
       compareAugmented.style.width = `${comparisonFrame.clientWidth}px`;
       compareAugmented.style.height = `${comparisonFrame.clientHeight}px`;
       const position = Number(compareRange.value);
@@ -305,9 +309,20 @@
     const imageWrap = document.createElement("div");
     imageWrap.className = "result-image-wrap";
     const image = document.createElement("img");
-    image.src = result.preview_url || result.url;
     image.alt = `Augmented variation ${index + 1}`;
-    image.loading = "lazy";
+    image.loading = "eager";
+    image.addEventListener("error", () => {
+      if (result.preview_data_url && !image.dataset.previewFallbackAttempted) {
+        image.dataset.previewFallbackAttempted = "true";
+        image.src = result.preview_url || result.url;
+        return;
+      }
+      const error = document.createElement("span");
+      error.className = "result-preview-error";
+      error.textContent = "Preview unavailable";
+      image.replaceWith(error);
+    });
+    image.src = resultPreviewSource(result);
     const number = document.createElement("span");
     number.className = "result-number";
     number.textContent = `VAR ${String(index + 1).padStart(2, "0")}`;

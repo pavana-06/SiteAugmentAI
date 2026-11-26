@@ -468,6 +468,7 @@ h1 em {
 .results-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 9px; }
 .result-card { overflow: hidden; border: 1px solid #233048; border-radius: 9px; background: #111927; animation: reveal 0.32s ease both; }
 .result-image-wrap { position: relative; height: 168px; display: grid; place-items: center; background: #080d16; }.result-image-wrap img { width: 100%; height: 100%; object-fit: contain; }
+.result-preview-error { width: 100%; height: 100%; display: grid; place-items: center; color: #8798ae; font-size: 9px; }
 .result-number { position: absolute; top: 8px; left: 8px; padding: 4px 6px; border: 1px solid #3b4d64; border-radius: 4px; background: rgba(7, 12, 21, 0.78); color: #bed0e4; font: 8px "DM Mono", monospace; }
 .result-info { padding: 9px; }.result-labels { min-height: 27px; display: flex; flex-wrap: wrap; gap: 4px; }.result-tag { padding: 3px 5px; border: 1px solid #2d4055; border-radius: 4px; background: #15243a; color: #86cad7; font-size: 7px; }
 .metric-row { display: flex; justify-content: space-between; gap: 8px; margin-top: 7px; padding-top: 7px; border-top: 1px solid #222d3d; color: #7d8ba0; font: 8px "DM Mono", monospace; }.metric-row strong { color: #bdcadb; font-weight: 400; text-align: right; }

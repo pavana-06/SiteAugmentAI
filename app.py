@@ -19,7 +19,12 @@ from detection.model_config import (
     MODEL_REPO_ID,
     MODEL_REVISION,
 )
-from utils.image_utils import decode_image, encode_png, image_metrics
+from utils.image_utils import (
+    decode_image,
+    encode_png,
+    encode_preview_data_url,
+    image_metrics,
+)
 
 
 def create_app(config_object=Config):
@@ -164,6 +169,7 @@ def create_app(config_object=Config):
                 "filename": filename,
                 "url": f"/download/{filename}",
                 "preview_url": f"/preview/{filename}",
+                "preview_data_url": encode_preview_data_url(augmented),
                 "labels": labels,
                 "metrics": image_metrics(original, augmented),
             })

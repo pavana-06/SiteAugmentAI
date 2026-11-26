@@ -1,8 +1,29 @@
-from io import BytesIO
+import base64
 import math
+from io import BytesIO
 
 import numpy as np
 from PIL import Image, UnidentifiedImageError
+
+
+def encode_preview_data_url(image):
+    preview = Image.fromarray(image, mode="RGB")
+    preview.thumbnail((512, 512), Image.Resampling.LANCZOS)
+
+    while True:
+        for quality in (72, 58, 44):
+            buffer = BytesIO()
+            preview.save(buffer, format="JPEG", quality=quality, optimize=True)
+            encoded = buffer.getvalue()
+            if len(encoded) <= 64 * 1024 or max(preview.size) <= 64:
+                data = base64.b64encode(encoded).decode("ascii")
+                return f"data:image/jpeg;base64,{data}"
+
+        width, height = preview.size
+        preview = preview.resize(
+            (max(1, round(width * 0.75)), max(1, round(height * 0.75))),
+            Image.Resampling.LANCZOS,
+        )
 
 
 def decode_image(data, allowed_extensions, max_pixels):
